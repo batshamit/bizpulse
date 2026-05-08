@@ -1,0 +1,21 @@
+# Qdrant config for the host-process deployment.
+# Override with QDRANT__SERVICE__HTTP_PORT etc. env vars or pass --config-path.
+
+log_level: INFO
+
+storage:
+  storage_path: /raid/amit/mylearning/bizpulse/data/qdrant
+  snapshots_path: /raid/amit/mylearning/bizpulse/data/qdrant/snapshots
+  on_disk_payload: true
+
+service:
+  host: 127.0.0.1
+  http_port: 6333
+  grpc_port: 6334
+  enable_cors: true
+  max_request_size_mb: 32
+
+telemetry_disabled: true
+
+cluster:
+  enabled: false

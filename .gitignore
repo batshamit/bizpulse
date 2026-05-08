@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Envs
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Editors / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# BizPulse runtime artifacts
+data/
+.cache/
+logs/
+*.log
+screenshots/
+crawl_artifacts/
+eval_runs/
+
+# Models / weights — never commit
+*.bin
+*.pt
+*.pth
+*.safetensors
+*.gguf
+huggingface/
+hf_cache/
+
+# Secrets — extra paranoia
+*.pem
+*.key
+secrets/
+credentials.json

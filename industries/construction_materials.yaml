@@ -1,0 +1,67 @@
+slug: construction_materials
+name: Construction Materials
+description: B2B suppliers and manufacturers — cement, steel, tiles, sanitaryware, paints, adhesives, plywood, MEP fittings.
+
+ontology:
+  entities:
+    - product_category (cement, TMT bars, tiles, paints, sanitaryware, plywood, MEP)
+    - buyer_persona (architect, contractor, builder, retailer, end-consumer)
+    - sales_channel (project sales, retail, dealer/distributor, e-com)
+    - certification (ISI, BIS, IS-codes, ISO, GreenPro, ECBC)
+    - buying_unit (MOQ, truckload, palette)
+  regulations:
+    - BIS / IS code compliance (varies by product)
+    - GST classification
+    - GRIHA / IGBC (green building certifications)
+    - factory licensing, pollution NOCs
+  metrics:
+    - dealer_signups, distributor activations
+    - RFQ-to-order conversion
+    - architect-specifications won
+    - project-site walk-in count
+    - depth-of-distribution (towns covered)
+
+competitor_seeds:
+  - ultratechcement.com
+  - ambujacement.com
+  - tatasteel.com
+  - jswsteel.in
+  - asianpaints.com
+  - bergerpaints.com
+  - kajariaceramics.com
+  - somany.com
+  - pidilite.com
+  - hindwarehomes.com
+
+channel_weights:
+  linkedin: 0.95
+  youtube: 0.85
+  trade_publications: 0.9
+  google_search: 0.85
+  whatsapp_b2b: 0.9
+  instagram: 0.4
+  twitter: 0.2
+  trade_fairs: 0.95
+
+content_pillars:
+  - technical_spec_sheet    # IS code compliance, test reports
+  - architect_case_study    # marquee projects, BOQ wins
+  - dealer_program          # margins, training, co-branding
+  - sustainability_proof    # green certs, recycled content
+  - thought_leadership      # category trends, demand outlook
+
+prompt_addendum: |
+  This is B2B construction materials — long sales cycle, technical buyers, distributor-driven.
+  Every recommendation must:
+    - Lead with IS code / BIS / GRIHA / IGBC certifications where relevant.
+    - Differentiate channel strategy by buyer persona (architect vs contractor vs retailer vs end-consumer).
+    - Treat MOQ, truckload economics, and dealer margin as concrete decision drivers.
+    - Prefer LinkedIn + trade publications + WhatsApp groups over Instagram/Twitter.
+    - Flag missing certifications or unclear category positioning.
+    - Use technical, evidence-backed language; flowery brand storytelling underperforms here.
+
+golden_eval_seeds:
+  - tests/eval/golden/construction_materials/cement.json
+  - tests/eval/golden/construction_materials/tiles.json
+  - tests/eval/golden/construction_materials/paints.json
+  - tests/eval/golden/construction_materials/plywood.json

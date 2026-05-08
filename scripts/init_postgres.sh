@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Create the `bizpulse` role + DB on the existing local Postgres at :5432
+# and apply infra/postgres/init.sql. Idempotent.
+#
+# Requires: ability to run psql as the postgres superuser.
+# On Ubuntu we can normally use `sudo -u postgres psql` (interactive sudo).
+# If sudo isn't available, set PGSUPERUSER + PGSUPERPASSWORD and we'll connect normally.
+
+set -euo pipefail
+
+ROOT="${ROOT:-/raid/amit/mylearning/bizpulse}"
+cd "$ROOT"
+
+if [[ ! -f .env ]]; then
+  echo "ERROR: .env missing — copy .env.example to .env and edit it."
+  exit 2
+fi
+
+# shellcheck disable=SC1091
+set -a; . .env; set +a
+
+DB="${POSTGRES_DB:-bizpulse}"
+USER="${POSTGRES_USER:-bizpulse}"
+PASS="${POSTGRES_PASSWORD:-changeme}"
+HOST="${POSTGRES_HOST:-127.0.0.1}"
+PORT="${POSTGRES_PORT:-5432}"
+
+run_super() {
+  if [[ -n "${PGSUPERUSER:-}" && -n "${PGSUPERPASSWORD:-}" ]]; then
+    PGPASSWORD="$PGSUPERPASSWORD" psql -h "$HOST" -p "$PORT" -U "$PGSUPERUSER" -v ON_ERROR_STOP=1 "$@"
+  else
+    sudo -u postgres psql -h "$HOST" -p "$PORT" -v ON_ERROR_STOP=1 "$@"
+  fi
+}
+
+echo "==> create role $USER (idempotent)"
+run_super -c "DO \$\$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '$USER') THEN
+    CREATE ROLE \"$USER\" WITH LOGIN PASSWORD '$PASS';
+  END IF;
+END \$\$;"
+
+echo "==> create db $DB owned by $USER (idempotent)"
+EXISTS="$(run_super -tA -c "SELECT 1 FROM pg_database WHERE datname='$DB';")"
+if [[ "$EXISTS" != "1" ]]; then
+  run_super -c "CREATE DATABASE \"$DB\" OWNER \"$USER\";"
+else
+  echo "    already exists"
+fi
+
+echo "==> apply infra/postgres/init.sql"
+PGPASSWORD="$PASS" psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -v ON_ERROR_STOP=1 -f infra/postgres/init.sql
+
+echo "==> smoke test"
+PGPASSWORD="$PASS" psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -c "\\dt"

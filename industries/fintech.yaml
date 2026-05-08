@@ -1,0 +1,65 @@
+slug: fintech
+name: Financial Technology
+description: B2C / B2B financial services delivered via digital products — neobanks, lending, payments, wealthtech, insurtech.
+
+ontology:
+  entities:
+    - product (account, card, loan, insurance, investment)
+    - regulator (RBI, SEBI, IRDAI, FATF, OFAC)
+    - rail (UPI, IMPS, NEFT, ACH, SWIFT, NPCI)
+    - persona (salaried, gig, MSME, HNI, NRI)
+    - kyc_tier (full-KYC, min-KYC, video-KYC)
+  regulations:
+    - RBI digital lending guidelines (2022)
+    - SEBI investor advertising code
+    - IRDAI insurance disclosure norms
+    - PMLA / AML reporting
+    - DPDP Act 2023 (data protection)
+  metrics:
+    - CAC, LTV, activation rate, MAU/DAU
+    - NPA, gross / net delinquency
+    - product-stickiness (uses-per-week)
+    - assets-under-management, gross transaction value
+    - claim ratio, persistency
+
+competitor_seeds:
+  - razorpay.com
+  - cred.club
+  - jupiter.money
+  - jar.app
+  - groww.in
+  - zerodha.com
+  - upstox.com
+  - paytmmoney.com
+  - kuvera.in
+  - etmoney.com
+
+channel_weights:
+  linkedin: 0.9
+  youtube:  0.85
+  twitter:  0.8
+  instagram: 0.6
+  google_search: 0.95
+  podcast: 0.5
+  tv: 0.3
+
+content_pillars:
+  - product_education       # explainers, calculators
+  - regulatory_trust        # licenses, audits, partner banks
+  - financial_literacy      # budgeting, tax, investing 101
+  - customer_proof          # testimonials, case studies, reviews
+  - thought_leadership      # founder POV, market analysis
+
+prompt_addendum: |
+  This is a regulated financial services business. Every recommendation must:
+    - Avoid promising returns; phrase outcomes as past performance or ranges with disclaimers.
+    - Flag any claim that could violate RBI, SEBI, or IRDAI advertising norms.
+    - Prefer educational content over hard product pitches at top-of-funnel.
+    - Treat KYC, fees, and APR/interest as non-negotiable disclosure items.
+    - Reference RBI's digital lending guidelines (2022) when discussing loan flows.
+
+golden_eval_seeds:
+  - tests/eval/golden/fintech/neobank.json
+  - tests/eval/golden/fintech/lending.json
+  - tests/eval/golden/fintech/wealthtech.json
+  - tests/eval/golden/fintech/insurtech.json

@@ -1,0 +1,68 @@
+slug: real_estate
+name: Real Estate
+description: Residential and commercial real estate — developers, brokers, property tech platforms.
+
+ontology:
+  entities:
+    - project (residential, commercial, mixed-use)
+    - asset_class (apartment, villa, plot, office, retail, warehouse)
+    - lifecycle_stage (pre-launch, under-construction, ready-to-move, possession)
+    - persona (first-time-buyer, investor, NRI, upgrader)
+    - micromarket (city + locality)
+  regulations:
+    - RERA (Real Estate Regulatory Authority — state-specific registration numbers)
+    - DTCP / town-planning approvals
+    - GST on under-construction property
+    - FEMA NRI investment rules
+  metrics:
+    - footfall (site visits, walk-ins, virtual tours)
+    - cost-per-walk-in, cost-per-qualified-lead
+    - inventory absorption rate, days-on-market
+    - price-per-sqft trend
+    - possession on-time rate
+
+competitor_seeds:
+  - dlf.in
+  - lodhagroup.in
+  - godrejproperties.com
+  - prestigeconstructions.com
+  - sobha.com
+  - oberoirealty.com
+  - magicbricks.com
+  - 99acres.com
+  - housing.com
+  - nobroker.in
+
+channel_weights:
+  instagram: 1.0
+  youtube:  0.95
+  facebook: 0.85
+  google_search: 0.95
+  whatsapp: 0.9
+  linkedin: 0.5
+  twitter: 0.3
+  newspaper_print: 0.6
+
+content_pillars:
+  - project_walkthrough     # drone reels, 3D tours
+  - construction_progress   # transparency, builds trust
+  - locality_guide          # schools, transit, future infra
+  - financing_emi           # calculators, partner banks, NRI flows
+  - testimonial_handover    # owner-given-keys, social proof
+  - investment_thesis       # appreciation data, rental yield
+
+prompt_addendum: |
+  This is real estate marketing — high-ticket, local, visual, high-trust.
+  Every recommendation must:
+    - Quote the project's RERA registration number when promotional claims are made (or flag its absence).
+    - Avoid guaranteed-return language under RERA promotional norms.
+    - Treat possession dates as commitments, not aspirations.
+    - Prefer Instagram Reels and YouTube walkthroughs over text-heavy LinkedIn.
+    - Localize to the project's micromarket — generic "luxury living" copy is rejected.
+    - Surface compliance flags (RERA, GST on under-construction, NRI FEMA rules) when relevant.
+
+golden_eval_seeds:
+  - tests/eval/golden/real_estate/luxury_residential.json
+  - tests/eval/golden/real_estate/affordable_housing.json
+  - tests/eval/golden/real_estate/commercial_office.json
+  - tests/eval/golden/real_estate/property_marketplace.json
