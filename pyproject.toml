@@ -58,6 +58,7 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-cov>=5.0",
+    "pytest-httpx>=0.32",
     "pre-commit>=4.0",
     "types-PyYAML",
 ]
