@@ -1,4 +1,4 @@
-"""Agent layer: prompt building, the multi-LLM Council, and (Phase 6+) LangGraph nodes."""
+"""Agent layer: prompt building, multi-LLM Council, AgentRunner."""
 
 from __future__ import annotations
 
@@ -9,11 +9,21 @@ from bizpulse.agents.council import (
     ProposalRecord,
 )
 from bizpulse.agents.prompts import PromptBuilder
+from bizpulse.agents.runner import (
+    AgentRunError,
+    AgentRunner,
+    AgentRunResult,
+    extract_json,
+)
 
 __all__ = [
+    "AgentRunError",
+    "AgentRunResult",
+    "AgentRunner",
     "Council",
     "CouncilError",
     "CouncilResult",
     "ProposalRecord",
     "PromptBuilder",
+    "extract_json",
 ]
