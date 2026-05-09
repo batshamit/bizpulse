@@ -14,10 +14,9 @@ from bizpulse.eval import EvalRunner, GoldenExample, load_golden
 from bizpulse.llm import FakeLLMClient
 
 
-GOLDEN = Path(__file__).resolve().parents[1] / "tests" / "eval" / "golden" / "fintech" / "neobank_v1.json"
-# In test runs, __file__'s parents[1] is repo/tests, so re-anchor:
-REPO_ROOT = Path(__file__).resolve().parents[1]
-GOLDEN_NEOBANK = REPO_ROOT / "eval" / "golden" / "fintech" / "neobank_v1.json"
+GOLDEN_NEOBANK = (
+    Path(__file__).resolve().parent / "eval" / "golden" / "fintech" / "neobank_v1.json"
+)
 
 
 class _FakeEmbedder:
