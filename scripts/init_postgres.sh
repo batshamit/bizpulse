@@ -51,6 +51,16 @@ else
   echo "    already exists"
 fi
 
+echo "==> ensure extensions in $DB (as superuser)"
+# Extensions need superuser to install. We do them once here, then init.sql
+# becomes IF-NOT-EXISTS no-ops when applied as the bizpulse user.
+run_super -d "$DB" -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"; CREATE EXTENSION IF NOT EXISTS \"pgcrypto\";"
+
+echo "==> grant schema usage to $USER on $DB"
+# bizpulse role owns the DB but on some setups it doesn't own the public schema;
+# this makes the user-level apply step succeed regardless.
+run_super -d "$DB" -c "GRANT ALL ON SCHEMA public TO \"$USER\";"
+
 echo "==> apply infra/postgres/init.sql"
 PGPASSWORD="$PASS" psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -v ON_ERROR_STOP=1 -f infra/postgres/init.sql
 
