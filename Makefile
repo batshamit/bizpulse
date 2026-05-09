@@ -106,3 +106,12 @@ health:
 	@curl -fsS http://127.0.0.1:8081/health && echo " tei-embed OK"
 	@curl -fsS http://127.0.0.1:8082/health && echo " tei-rerank OK"
 	@curl -fsS http://127.0.0.1:8080/healthz && echo " bizpulse-api OK"
+
+.PHONY: demo
+demo:
+	@bash scripts/demo.sh
+
+.PHONY: eval
+eval:
+	@$(VENV)/bin/python -m bizpulse.eval.cli --mock 2>/dev/null || \
+		echo "(eval CLI not yet implemented — see scripts/run_eval.py for the manual invocation)"
