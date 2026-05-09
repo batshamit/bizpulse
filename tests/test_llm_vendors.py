@@ -6,8 +6,8 @@ var (skipped otherwise) — those run in CI when secrets are available.
 
 from __future__ import annotations
 
-import json
 import os
+import re
 
 import pytest
 from pytest_httpx import HTTPXMock
@@ -113,7 +113,9 @@ async def test_grok_and_deepseek_use_their_urls(httpx_mock: HTTPXMock) -> None:
 @pytest.mark.asyncio
 async def test_gemini_happy_path(httpx_mock: HTTPXMock) -> None:
     httpx_mock.add_response(
-        url__regex=r"https://generativelanguage\.googleapis\.com/v1beta/models/gemini-2\.5-pro:generateContent\?key=.*",
+        url=re.compile(
+            r"https://generativelanguage\.googleapis\.com/v1beta/models/gemini-2\.5-pro:generateContent\?key=.*"
+        ),
         json={
             "candidates": [
                 {
