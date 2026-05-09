@@ -1,0 +1,40 @@
+{
+  "id": "fintech-neobank-v1",
+  "industry": "fintech",
+  "business_url": "https://example-neobank.test",
+  "description": "Synthetic neobank for gig workers — exercises the brand_analyst agent against a known-good context.",
+  "chunks": [
+    {
+      "text": "Hero. We are a compliance-first neobank for India's gig-economy salaried workforce. Our pitch is that traditional banks reject 60% of platform workers' loan applications; we approve them at 92% within 24 hours.",
+      "source_type": "about_page",
+      "source_url": "https://example-neobank.test/",
+      "section": "Hero"
+    },
+    {
+      "text": "Pricing. Three tiers: starter (free), growth (₹199/mo + 1.5% FX margin), enterprise (custom). All tiers include UPI, instant credit-line, and full RBI-compliant KYC. Pay only on active borrower per RBI digital lending guidelines (2022).",
+      "source_type": "pricing_page",
+      "source_url": "https://example-neobank.test/pricing",
+      "section": "Pricing"
+    },
+    {
+      "text": "Founders' note. We built this after our co-founder's Swiggy delivery partner couldn't open an account at four major banks despite a stable 18-month income on the platform. The compliance burden falls on the lender, not the borrower — that's the whole product thesis.",
+      "source_type": "blog_post",
+      "source_url": "https://example-neobank.test/blog/why-we-built-this",
+      "section": "Founder note"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "brand-positioning",
+      "agent": "brand_analyst",
+      "task": "Extract the company's brand positioning, tone, and 3 value propositions.",
+      "query_text": "positioning value propositions tone",
+      "output_schema": "BrandAnalysis",
+      "expected": {
+        "min_citations": 1,
+        "must_contain_keywords": ["gig", "compliance"],
+        "must_not_contain_keywords": ["crypto", "BTC"]
+      }
+    }
+  ]
+}
