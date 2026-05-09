@@ -20,7 +20,7 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
-from typing import TypeVar
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -40,7 +40,7 @@ T = TypeVar("T", bound=BaseModel)
 # ---- result type --------------------------------------------------------
 
 @dataclass
-class AgentRunResult[T: BaseModel]:
+class AgentRunResult(Generic[T]):
     """One full run of one agent. The interesting bit for callers is `output`;
     the rest is audit trail for the Critic and the failure-replay UI."""
 
