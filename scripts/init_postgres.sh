@@ -54,7 +54,12 @@ fi
 echo "==> ensure extensions in $DB (as superuser)"
 # Extensions need superuser to install. We do them once here, then init.sql
 # becomes IF-NOT-EXISTS no-ops when applied as the bizpulse user.
-run_super -d "$DB" -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"; CREATE EXTENSION IF NOT EXISTS \"pgcrypto\";"
+# Keep this list in sync with infra/postgres/init.sql.
+run_super -d "$DB" -c "
+    CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";
+    CREATE EXTENSION IF NOT EXISTS \"pgcrypto\";
+    CREATE EXTENSION IF NOT EXISTS \"citext\";
+"
 
 echo "==> grant schema usage to $USER on $DB"
 # bizpulse role owns the DB but on some setups it doesn't own the public schema;
