@@ -29,7 +29,10 @@ run_super() {
   if [[ -n "${PGSUPERUSER:-}" && -n "${PGSUPERPASSWORD:-}" ]]; then
     PGPASSWORD="$PGSUPERPASSWORD" psql -h "$HOST" -p "$PORT" -U "$PGSUPERUSER" -v ON_ERROR_STOP=1 "$@"
   else
-    sudo -u postgres psql -h "$HOST" -p "$PORT" -v ON_ERROR_STOP=1 "$@"
+    # Use the Unix socket (no -h) so we get peer auth as the postgres OS
+    # user — no password needed. cd /tmp avoids the harmless
+    # "could not change directory" warning when sudo switches user.
+    (cd /tmp && sudo -u postgres psql -v ON_ERROR_STOP=1 "$@")
   fi
 }
 
