@@ -21,6 +21,10 @@ from bizpulse.llm.fakes import (
     ScriptedLLMClient,
 )
 
+# Vendor adapters are imported lazily inside factory.* — they pull in
+# heavy SDKs (anthropic, httpx) that should not fail on missing optional
+# config.
+
 __all__ = [
     "PRICING_PER_1K",
     "CallableLLMClient",
