@@ -24,6 +24,7 @@ from bizpulse.models.common import (
     StrictModel,
     Tenant,
     TenantId,
+    slugify,
     utcnow,
 )
 from bizpulse.models.industry import (
@@ -103,5 +104,6 @@ __all__ = [
     "TenantId",
     "load_all_industries",
     "load_industry",
+    "slugify",
     "utcnow",
 ]

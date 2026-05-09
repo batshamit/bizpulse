@@ -7,13 +7,20 @@ from pydantic import BaseModel, Field
 
 from bizpulse.api.dependencies import get_store, require_tenant
 from bizpulse.models import Tenant
-from bizpulse.storage import InMemoryStore
+from bizpulse.storage import Store
 
 router = APIRouter(prefix="/v1/tenants", tags=["tenants"])
 
 
 class CreateTenantRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
+    slug: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        pattern=r"^[a-z0-9][a-z0-9-]*$",
+        description="Optional URL-friendly identifier. Auto-generated from `name` if omitted.",
+    )
 
 
 @router.post(
@@ -25,9 +32,9 @@ class CreateTenantRequest(BaseModel):
 )
 def create_tenant(
     body: CreateTenantRequest,
-    store: InMemoryStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> Tenant:
-    return store.create_tenant(name=body.name)
+    return store.create_tenant(name=body.name, slug=body.slug)
 
 
 @router.get(

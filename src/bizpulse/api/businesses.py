@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from bizpulse.api.dependencies import get_store, require_tenant
 from bizpulse.models import Business, RunRecord, Tenant
 from bizpulse.models.common import SUPPORTED_INDUSTRIES
-from bizpulse.storage import InMemoryStore
+from bizpulse.storage import Store
 
 router = APIRouter(prefix="/v1/businesses", tags=["businesses"])
 
@@ -28,7 +28,7 @@ class CreateBusinessRequest(BaseModel):
 def create_business(
     body: CreateBusinessRequest,
     tenant: Tenant = Depends(require_tenant),
-    store: InMemoryStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> Business:
     if body.industry is not None and body.industry not in SUPPORTED_INDUSTRIES:
         raise HTTPException(
@@ -41,7 +41,7 @@ def create_business(
 @router.get("", response_model=list[Business])
 def list_businesses(
     tenant: Tenant = Depends(require_tenant),
-    store: InMemoryStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> list[Business]:
     return store.list_businesses(tenant.id)
 
@@ -50,7 +50,7 @@ def list_businesses(
 def get_business(
     business_id: UUID,
     tenant: Tenant = Depends(require_tenant),
-    store: InMemoryStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> Business:
     biz = store.get_business(business_id)
     if biz is None or biz.tenant_id != tenant.id:
@@ -68,7 +68,7 @@ def get_business(
 def analyze(
     business_id: UUID,
     tenant: Tenant = Depends(require_tenant),
-    store: InMemoryStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> RunRecord:
     biz = store.get_business(business_id)
     if biz is None or biz.tenant_id != tenant.id:
@@ -80,7 +80,7 @@ def analyze(
 def list_runs(
     business_id: UUID,
     tenant: Tenant = Depends(require_tenant),
-    store: InMemoryStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> list[RunRecord]:
     biz = store.get_business(business_id)
     if biz is None or biz.tenant_id != tenant.id:

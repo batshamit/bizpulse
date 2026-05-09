@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import secrets
 from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -35,11 +37,28 @@ def utcnow() -> datetime:
     return datetime.now(tz=timezone.utc)
 
 
+# --- helpers ------------------------------------------------------------------
+
+_SLUG_NORMALIZE_RE = re.compile(r"[^a-z0-9]+")
+
+
+def slugify(name: str, *, suffix: bool = True) -> str:
+    """Tenant-slug generator. Lowercase, dash-separated, optional 6-char suffix
+    so two tenants named 'Acme' don't collide on the DB UNIQUE constraint."""
+    base = _SLUG_NORMALIZE_RE.sub("-", name.lower()).strip("-")
+    base = (base or "tenant")[:40]
+    if not suffix:
+        return base
+    tail = secrets.token_urlsafe(6).lower().replace("_", "").replace("-", "")[:6] or "x"
+    return f"{base}-{tail}"
+
+
 # --- Domain entities ----------------------------------------------------------
 
 class Tenant(StrictModel):
     id: TenantId = Field(default_factory=uuid4)
     name: str = Field(min_length=1)
+    slug: Annotated[str, Field(min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]*$")]
     api_key: str = Field(min_length=8, description="Per-tenant API key for authentication.")
     created_at: datetime = Field(default_factory=utcnow)
 

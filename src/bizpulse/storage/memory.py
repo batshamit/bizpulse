@@ -21,6 +21,7 @@ from bizpulse.models import (
     RunStatus,
     Tenant,
     TenantId,
+    slugify,
 )
 from bizpulse.models.common import utcnow
 
@@ -30,12 +31,14 @@ def _generate_api_key() -> str:
 
 
 class InMemoryStore:
-    """Stub store. Replace with Postgres impl in a follow-up commit."""
+    """Stub store. The Postgres impl in `bizpulse.storage.postgres` mirrors
+    this surface — callers can swap via env var (`BIZPULSE_STORE`)."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._tenants: dict[TenantId, Tenant] = {}
         self._tenants_by_api_key: dict[str, TenantId] = {}
+        self._tenants_by_slug: dict[str, TenantId] = {}
         self._businesses: dict[BusinessId, Business] = {}
         self._businesses_by_tenant: dict[TenantId, list[BusinessId]] = {}
         self._runs: dict[UUID, RunRecord] = {}
@@ -43,11 +46,15 @@ class InMemoryStore:
 
     # ----- tenants -------------------------------------------------------
 
-    def create_tenant(self, name: str) -> Tenant:
+    def create_tenant(self, name: str, slug: str | None = None) -> Tenant:
         with self._lock:
-            tenant = Tenant(name=name, api_key=_generate_api_key())
+            chosen_slug = slug or slugify(name)
+            if chosen_slug in self._tenants_by_slug:
+                raise ValueError(f"slug already in use: {chosen_slug}")
+            tenant = Tenant(name=name, slug=chosen_slug, api_key=_generate_api_key())
             self._tenants[tenant.id] = tenant
             self._tenants_by_api_key[tenant.api_key] = tenant.id
+            self._tenants_by_slug[tenant.slug] = tenant.id
             self._businesses_by_tenant.setdefault(tenant.id, [])
             return tenant
 

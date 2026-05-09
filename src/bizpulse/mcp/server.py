@@ -32,9 +32,9 @@ mcp = FastMCP(name="bizpulse", instructions=(
 # so MCP clients see proper type hints in their tool catalog.
 
 @mcp.tool()
-def register_tenant(name: str) -> dict[str, Any]:
+def register_tenant(name: str, slug: str | None = None) -> dict[str, Any]:
     """Create a new BizPulse tenant. Returns the api_key (shown once)."""
-    return _t.register_tenant(name=name)
+    return _t.register_tenant(name=name, slug=slug)
 
 
 @mcp.tool()

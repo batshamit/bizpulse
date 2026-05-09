@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from bizpulse.api.dependencies import get_store, require_tenant
 from bizpulse.models import RunRecord, Tenant
-from bizpulse.storage import InMemoryStore
+from bizpulse.storage import Store
 
 router = APIRouter(prefix="/v1/runs", tags=["runs"])
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/v1/runs", tags=["runs"])
 def get_run(
     run_id: UUID,
     tenant: Tenant = Depends(require_tenant),
-    store: InMemoryStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> RunRecord:
     run = store.get_run(run_id)
     if run is None or run.tenant_id != tenant.id:

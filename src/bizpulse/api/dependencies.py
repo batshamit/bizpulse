@@ -5,16 +5,16 @@ from __future__ import annotations
 from fastapi import Depends, Header, HTTPException, status
 
 from bizpulse.models import Tenant
-from bizpulse.storage import InMemoryStore, get_default_store
+from bizpulse.storage import Store, get_default_store
 
 
-def get_store() -> InMemoryStore:
+def get_store() -> Store:
     return get_default_store()
 
 
 def require_tenant(
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
-    store: InMemoryStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> Tenant:
     """Auth: lookup tenant by API key from `X-API-Key` header.
 

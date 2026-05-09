@@ -23,7 +23,7 @@ from bizpulse.models import (
     load_all_industries,
     load_industry,
 )
-from bizpulse.storage import InMemoryStore, get_default_store
+from bizpulse.storage import Store, get_default_store
 
 
 class AuthError(RuntimeError):
@@ -36,7 +36,7 @@ class NotFoundError(RuntimeError):
 
 # --- helpers ------------------------------------------------------------
 
-def _store() -> InMemoryStore:
+def _store() -> Store:
     return get_default_store()
 
 
@@ -59,9 +59,9 @@ def _resolve_business(tenant: Tenant, business_id: str) -> Business:
 
 # --- tenant tools -------------------------------------------------------
 
-def register_tenant(name: str) -> dict[str, Any]:
+def register_tenant(name: str, slug: str | None = None) -> dict[str, Any]:
     """Create a new tenant. Returns the api_key (only shown once)."""
-    tenant = _store().create_tenant(name)
+    tenant = _store().create_tenant(name=name, slug=slug)
     return tenant.model_dump(mode="json")
 
 
