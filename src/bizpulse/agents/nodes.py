@@ -167,8 +167,13 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
             )
             # Merge the prior analyst outputs back into the strategy so the
             # final report carries the full structure even though the LLM
-            # only emitted the synthesis-specific fields.
+            # only emitted the synthesis-specific fields. Also normalize
+            # `industry` to the canonical slug from state — the LLM
+            # sometimes emits the long form ("Financial Technology") which
+            # breaks downstream policy lookup keyed on the slug.
+            canonical_industry = state.get("industry") or r.output.industry
             merged = r.output.model_copy(update={
+                "industry": canonical_industry,
                 "brand": state.get("brand") or r.output.brand,
                 "audience": state.get("audience") or r.output.audience,
                 "competitive_landscape": state.get("competitive_landscape") or r.output.competitive_landscape,

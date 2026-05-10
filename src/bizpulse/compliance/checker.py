@@ -74,6 +74,38 @@ def _format_policies(policies: list[PolicyRef]) -> str:
     return "\n".join(lines)
 
 
+def _strategy_brief(strategy: MarketingStrategy) -> str:
+    """Compact JSON view of the strategy that fits in a small prompt budget.
+
+    Drops the verbose nested analytical objects (brand/audience/competitive_/
+    content_) — the compliance checker only really needs to score the
+    recommendations + summary against policies. If a recommendation cites
+    an analyst-output claim, the chunk_ids on the recommendation itself
+    are enough for traceability."""
+    competitor_names = []
+    if strategy.competitive_landscape:
+        competitor_names = [c.name for c in strategy.competitive_landscape.competitors[:6]]
+
+    brief: dict[str, object] = {
+        "industry": strategy.industry,
+        "summary": strategy.summary,
+        "competitor_names": competitor_names,
+        "recommendations": [
+            {
+                "channel": r.channel,
+                "action": r.action,
+                "rationale": r.rationale[:300],
+                "priority": r.priority,
+                "confidence": r.confidence,
+                "compliance_flags": r.compliance_flags,
+                "evidence_chunk_ids": [str(cid)[:8] for cid in r.evidence_chunk_ids[:3]],
+            }
+            for r in strategy.recommendations
+        ],
+    }
+    return json.dumps(brief, indent=2)
+
+
 def _build_user_prompt(
     *,
     strategy: MarketingStrategy,
@@ -88,8 +120,8 @@ def _build_user_prompt(
         "----- APPLICABLE POLICIES -----\n"
         f"{_format_policies(policies)}\n"
         "----- END POLICIES -----\n\n"
-        "----- STRATEGY UNDER REVIEW -----\n"
-        f"{strategy.model_dump_json(indent=2)}\n"
+        "----- STRATEGY UNDER REVIEW (brief) -----\n"
+        f"{_strategy_brief(strategy)}\n"
         "----- END STRATEGY -----\n\n"
         f"Reply with ONLY a JSON object matching this exact ComplianceReport schema:\n"
         f"```json\n{schema_json}\n```\n\n"
