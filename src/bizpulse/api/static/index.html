@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BizPulse — Sign in</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/ui/css/app.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <script src="/ui/js/app.js"></script>
+</head>
+<body>
+<div class="bzp-container" style="max-width:480px; margin-top:6rem;" x-data="loginPage()">
+
+  <div style="text-align:center; margin-bottom:2.5rem;">
+    <div class="bzp-brand" style="font-size:2.4rem;">BizPulse<span class="dot">.</span></div>
+    <div class="bzp-page-subtitle" style="margin-top:0.4rem;">Multi-LLM, citation-grounded marketing strategy.</div>
+  </div>
+
+  <div class="bzp-card">
+    <div style="display:flex; gap:0.4rem; margin-bottom:1.5rem; padding:0.3rem; background:var(--bzp-cream); border-radius:var(--bzp-radius);">
+      <button @click="mode='login'" :class="mode==='login' ? 'bzp-btn bzp-btn-primary' : 'bzp-btn bzp-btn-ghost'" style="flex:1; justify-content:center;">Sign in</button>
+      <button @click="mode='create'" :class="mode==='create' ? 'bzp-btn bzp-btn-primary' : 'bzp-btn bzp-btn-ghost'" style="flex:1; justify-content:center;">New tenant</button>
+    </div>
+
+    <template x-if="mode === 'login'">
+      <form @submit.prevent="submitLogin()" autocomplete="off">
+        <h2 style="margin-bottom:0.4rem;">Welcome back</h2>
+        <div style="color:var(--bzp-ink-soft); font-size:0.95rem; margin-bottom:1.5rem;">Paste your tenant API key.</div>
+
+        <label class="bzp-label" for="apiKey">API key</label>
+        <input id="apiKey" x-model="apiKey" type="password" placeholder="bzp_..." class="bzp-input" required autofocus>
+
+        <button type="submit" :disabled="busy" class="bzp-btn bzp-btn-primary" style="width:100%; margin-top:1.25rem; justify-content:center;">
+          <span x-show="!busy">Sign in →</span>
+          <span x-show="busy">Verifying…</span>
+        </button>
+        <div x-show="error" x-text="error" style="color:var(--bzp-danger); font-size:0.88rem; margin-top:0.9rem; text-align:center;"></div>
+      </form>
+    </template>
+
+    <template x-if="mode === 'create'">
+      <form @submit.prevent="submitCreate()" autocomplete="off">
+        <h2 style="margin-bottom:0.4rem;">Create a tenant</h2>
+        <div style="color:var(--bzp-ink-soft); font-size:0.95rem; margin-bottom:1.5rem;">A new tenant + API key will be generated. Save the key — it's shown once.</div>
+
+        <label class="bzp-label" for="tenantName">Tenant name</label>
+        <input id="tenantName" x-model="name" type="text" placeholder="Acme Demo" class="bzp-input" required autofocus>
+
+        <button type="submit" :disabled="busy" class="bzp-btn bzp-btn-primary" style="width:100%; margin-top:1.25rem; justify-content:center;">
+          <span x-show="!busy">Create tenant →</span>
+          <span x-show="busy">Creating…</span>
+        </button>
+        <div x-show="error" x-text="error" style="color:var(--bzp-danger); font-size:0.88rem; margin-top:0.9rem; text-align:center;"></div>
+      </form>
+    </template>
+  </div>
+
+  <div style="text-align:center; color:var(--bzp-ink-faint); font-size:0.8rem; margin-top:2rem;">
+    Backed by a Council of LLMs (Gemini · Groq · Claude · Mistral) — every claim is cited; every recommendation is policy-checked.
+  </div>
+</div>
+</body>
+</html>

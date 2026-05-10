@@ -17,7 +17,12 @@ def clean_store() -> None:
 def test_root_and_healthz() -> None:
     with TestClient(app) as client:
         assert client.get("/healthz").json()["status"] == "ok"
-        assert client.get("/").json()["service"] == "bizpulse"
+        # /api is the new JSON service-info endpoint; / redirects to /ui/
+        assert client.get("/api").json()["service"] == "bizpulse"
+        # / is now a redirect to the static GUI
+        r = client.get("/", follow_redirects=False)
+        assert r.status_code in (302, 307)
+        assert "/ui" in r.headers.get("location", "")
 
 
 def test_tenant_create_and_whoami() -> None:

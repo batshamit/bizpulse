@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BizPulse — New report</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/ui/css/app.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <script src="/ui/js/app.js"></script>
+</head>
+<body>
+
+<nav class="bzp-nav" x-data="topNav()">
+  <div class="bzp-nav-inner">
+    <a href="/ui/dashboard.html" class="bzp-brand" style="text-decoration:none; color:var(--bzp-ink);">BizPulse<span class="dot">.</span></a>
+    <div class="bzp-nav-links" style="display:flex; align-items:center;">
+      <a href="/ui/dashboard.html">Dashboard</a>
+      <a href="/ui/new-report.html" class="active">New report</a>
+      <a href="/ui/history.html">History</a>
+      <span x-show="tenant" style="color:var(--bzp-ink-faint); margin-left:1.5rem; font-size:0.85rem;" x-text="tenant?.name"></span>
+      <a href="#" @click.prevent="logout()" style="margin-left:0.8rem; color:var(--bzp-ink-soft);">Sign out</a>
+    </div>
+  </div>
+</nav>
+
+<div class="bzp-container" style="max-width:720px;" x-data="newReportPage()">
+
+  <h1 class="bzp-page-title">New analysis</h1>
+  <div class="bzp-page-subtitle">Give us a business URL and the relevant jurisdiction. The Council of LLMs will produce a grounded marketing strategy + compliance audit.</div>
+
+  <form @submit.prevent="submit()" class="bzp-card" autocomplete="off">
+
+    <label class="bzp-label" for="url">Business URL</label>
+    <input id="url" x-model="url" type="url" placeholder="https://example-fintech.com" class="bzp-input" required>
+    <div style="color:var(--bzp-ink-faint); font-size:0.8rem; margin-top:0.4rem;">
+      The crawler hits the landing page + same-domain pages (max 20). JS-rendered sites are supported via Playwright.
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; margin-top:1.5rem;">
+      <div>
+        <label class="bzp-label" for="industry">Industry</label>
+        <select id="industry" x-model="industry" class="bzp-select" required>
+          <template x-for="i in INDUSTRIES" :key="i">
+            <option :value="i" x-text="i.replace(/_/g, ' ')"></option>
+          </template>
+        </select>
+      </div>
+      <div>
+        <label class="bzp-label" for="country">Country</label>
+        <select id="country" x-model="country" class="bzp-select" required>
+          <template x-for="c in COUNTRIES" :key="c.code">
+            <option :value="c.code" x-text="c.name"></option>
+          </template>
+        </select>
+      </div>
+    </div>
+
+    <div x-show="country === 'IN'" style="margin-top:1.25rem;">
+      <label class="bzp-label" for="state">State (for state-specific RERA / regulators)</label>
+      <select id="state" x-model="state" class="bzp-select">
+        <template x-for="s in STATES_IN" :key="s.code">
+          <option :value="s.code" x-text="s.name"></option>
+        </template>
+      </select>
+    </div>
+
+    <hr class="bzp-divider">
+
+    <div style="background:var(--bzp-accent-soft); border:1px solid var(--bzp-accent); border-radius:var(--bzp-radius); padding:1rem 1.2rem; font-size:0.9rem; color:var(--bzp-accent-dark); margin-bottom:1.5rem;">
+      <strong>What you'll get:</strong>
+      <ul style="margin:0.5rem 0 0 1.2rem; padding:0;">
+        <li>Brand · Audience · Competitor · Content audits (4 LLMs proposing in parallel)</li>
+        <li>Synthesized MarketingStrategy with 3-7 prioritized recommendations</li>
+        <li>Compliance audit against jurisdiction-specific policies + the 4 L's score</li>
+        <li>Per-recommendation citations to the source chunks</li>
+      </ul>
+    </div>
+
+    <button type="submit" :disabled="busy" class="bzp-btn bzp-btn-primary" style="width:100%; justify-content:center; padding:0.85rem;">
+      <span x-show="!busy">Start analysis →</span>
+      <span x-show="busy">Starting…</span>
+    </button>
+    <div x-show="error" x-text="error" style="color:var(--bzp-danger); font-size:0.88rem; margin-top:0.9rem; text-align:center;"></div>
+  </form>
+
+</div>
+</body>
+</html>

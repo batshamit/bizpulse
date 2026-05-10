@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BizPulse — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/ui/css/app.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <script src="/ui/js/app.js"></script>
+</head>
+<body>
+
+<nav class="bzp-nav" x-data="topNav()">
+  <div class="bzp-nav-inner">
+    <a href="/ui/dashboard.html" class="bzp-brand" style="text-decoration:none; color:var(--bzp-ink);">BizPulse<span class="dot">.</span></a>
+    <div class="bzp-nav-links" style="display:flex; align-items:center;">
+      <a href="/ui/dashboard.html" class="active">Dashboard</a>
+      <a href="/ui/new-report.html">New report</a>
+      <a href="/ui/history.html">History</a>
+      <span x-show="tenant" style="color:var(--bzp-ink-faint); margin-left:1.5rem; font-size:0.85rem;" x-text="tenant?.name"></span>
+      <a href="#" @click.prevent="logout()" style="margin-left:0.8rem; color:var(--bzp-ink-soft);">Sign out</a>
+    </div>
+  </div>
+</nav>
+
+<div class="bzp-container" x-data="dashboardPage()">
+
+  <h1 class="bzp-page-title">Dashboard</h1>
+  <div class="bzp-page-subtitle">Your tenant's businesses and recent analysis runs.</div>
+
+  <div class="bzp-grid-stats">
+    <div class="bzp-stat">
+      <div class="bzp-stat-label">Businesses</div>
+      <div class="bzp-stat-value" x-text="businesses.length"></div>
+    </div>
+    <div class="bzp-stat">
+      <div class="bzp-stat-label">Runs (recent)</div>
+      <div class="bzp-stat-value" x-text="runs.length"></div>
+    </div>
+    <div class="bzp-stat">
+      <div class="bzp-stat-label">Tenant</div>
+      <div class="bzp-stat-value" style="font-size:1.1rem;" x-text="tenant?.slug || '—'"></div>
+    </div>
+    <div class="bzp-stat" style="background:var(--bzp-accent); color:#fff; border-color:var(--bzp-accent);">
+      <div class="bzp-stat-label" style="color:#f5e6df;">Quick action</div>
+      <a href="/ui/new-report.html" class="bzp-btn" style="background:#fff; color:var(--bzp-accent); margin-top:0.5rem;">+ New analysis</a>
+    </div>
+  </div>
+
+  <div class="bzp-card">
+    <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:1rem;">
+      <h2 style="margin:0;">Recent runs</h2>
+      <a href="/ui/history.html" style="font-size:0.9rem;">View all →</a>
+    </div>
+
+    <template x-if="busy">
+      <div class="bzp-empty">Loading…</div>
+    </template>
+
+    <template x-if="!busy && runs.length === 0">
+      <div class="bzp-empty">
+        <div style="font-size:1.05rem; margin-bottom:0.5rem;">No runs yet.</div>
+        <a href="/ui/new-report.html" class="bzp-btn bzp-btn-primary">Start your first analysis →</a>
+      </div>
+    </template>
+
+    <template x-if="!busy && runs.length > 0">
+      <table class="bzp-table">
+        <thead><tr>
+          <th>Business</th><th>Started</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody>
+          <template x-for="r in runs" :key="r.id">
+            <tr>
+              <td><span x-text="bizName(r.business_id)" style="font-weight:500;"></span></td>
+              <td style="color:var(--bzp-ink-soft);" x-text="fmtTime(r.started_at)"></td>
+              <td><span x-html="statusPill(r.status)"></span></td>
+              <td style="text-align:right;">
+                <a :href="`/ui/report.html?run=${r.id}`" class="bzp-btn bzp-btn-ghost" style="padding:0.4rem 0.85rem; font-size:0.85rem;">Open</a>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </template>
+  </div>
+
+</div>
+</body>
+</html>
