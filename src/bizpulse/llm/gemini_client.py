@@ -102,19 +102,41 @@ class GeminiClient:
             )
 
         latency_ms = (time.perf_counter() - t0) * 1000.0
+        # Gemini may return a candidate with NO `parts` when:
+        #   - max_tokens reached during the model's "thinking" phase (2.5 series)
+        #   - safety filter triggered (finish_reason 'SAFETY')
+        #   - blocked input
+        # Surface a useful error including the finish_reason instead of a bare KeyError.
         try:
-            text_parts = data["candidates"][0]["content"]["parts"]
-            text = "".join(p.get("text", "") for p in text_parts)
-            usage = data.get("usageMetadata", {})
-            in_tok = int(usage.get("promptTokenCount", 0))
-            out_tok = int(usage.get("candidatesTokenCount", 0))
-        except (KeyError, IndexError, TypeError) as exc:
+            candidate = data["candidates"][0]
+        except (KeyError, IndexError) as exc:
             raise LLMError(
-                f"gemini returned unparseable response: {exc}; raw={str(data)[:300]}",
+                f"gemini returned no candidates: raw={str(data)[:300]}",
                 vendor=self.vendor,
                 model=self.model,
                 retryable=False,
             ) from exc
+
+        finish_reason = candidate.get("finishReason")
+        parts = candidate.get("content", {}).get("parts")
+        if not parts:
+            extra = ""
+            if finish_reason == "MAX_TOKENS":
+                extra = (
+                    " — Gemini 2.5 'thinking' may have used the entire budget. "
+                    "Pass max_tokens >= 1024 for these models."
+                )
+            raise LLMError(
+                f"gemini returned no text content (finishReason={finish_reason}){extra}",
+                vendor=self.vendor,
+                model=self.model,
+                retryable=(finish_reason == "MAX_TOKENS"),
+            )
+
+        text = "".join(p.get("text", "") for p in parts)
+        usage = data.get("usageMetadata", {})
+        in_tok = int(usage.get("promptTokenCount", 0))
+        out_tok = int(usage.get("candidatesTokenCount", 0))
 
         return CompletionResult(
             text=text,
