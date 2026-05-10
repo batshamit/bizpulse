@@ -198,3 +198,24 @@ def GroqClient(model: str = "llama-3.3-70b-versatile", **kw: Any) -> OpenAICompa
         api_key_env="GROQ_API_KEY",
         **kw,
     )
+
+
+def OpenRouterClient(
+    model: str = "anthropic/claude-sonnet-4-6",
+    **kw: Any,
+) -> OpenAICompatClient:
+    """OpenRouter — single gateway, hundreds of upstream models.
+
+    Models are addressed as 'provider/name', e.g.
+    'anthropic/claude-sonnet-4-6', 'openai/gpt-4o', 'meta-llama/llama-3.3-70b-instruct'.
+    Cost is reported in OpenRouter's response usage but our estimate_cost
+    table doesn't carry per-route pricing — it returns 0 for openrouter,
+    so use OpenRouter's dashboard for billing truth.
+    """
+    return OpenAICompatClient(
+        vendor="openrouter",
+        model=model,
+        base_url="https://openrouter.ai/api/v1",
+        api_key_env="OPENROUTER_API_KEY",
+        **kw,
+    )
