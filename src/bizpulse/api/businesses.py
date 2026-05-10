@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from bizpulse.api.dependencies import get_store, require_tenant
+from bizpulse.api.runner_service import run_analysis_background
 from bizpulse.models import Business, RunRecord, Tenant
 from bizpulse.models.common import SUPPORTED_INDUSTRIES
 from bizpulse.storage import Store
@@ -58,22 +59,47 @@ def get_business(
     return biz
 
 
+class AnalyzeRequest(BaseModel):
+    """Optional jurisdiction override for the run."""
+
+    country: str = Field(default="IN", min_length=2, max_length=3)
+    state: str | None = Field(default=None, max_length=64)
+
+
 @router.post(
     "/{business_id}/analyze",
     response_model=RunRecord,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Kick off the analysis pipeline",
-    description="Creates a RunRecord in `pending` state. The actual multi-agent pipeline lands in Phase 6 — this endpoint is the public contract that Phase 6 will fulfil.",
+    description=(
+        "Creates a RunRecord in `pending` state and schedules a background "
+        "task that crawls + chunks + embeds + runs the multi-agent LangGraph "
+        "(council debate -> compliance audit). Poll /v1/runs/{id} for status; "
+        "when status='complete', `final_output` carries the MarketingStrategy "
+        "with embedded ComplianceReport."
+    ),
 )
 def analyze(
     business_id: UUID,
+    bg: BackgroundTasks,
+    body: AnalyzeRequest | None = None,
     tenant: Tenant = Depends(require_tenant),
     store: Store = Depends(get_store),
 ) -> RunRecord:
     biz = store.get_business(business_id)
     if biz is None or biz.tenant_id != tenant.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
-    return store.create_run(tenant.id, business_id)
+    run = store.create_run(tenant.id, business_id)
+    country = (body.country if body else "IN")
+    state = (body.state if body else None)
+    bg.add_task(
+        run_analysis_background,
+        run_id=run.id,
+        business=biz,
+        country=country,
+        state=state,
+    )
+    return run
 
 
 @router.get("/{business_id}/runs", response_model=list[RunRecord])

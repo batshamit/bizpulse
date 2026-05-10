@@ -1,13 +1,15 @@
-"""TEI (Text Embeddings Inference) client.
+"""TEI (Text Embeddings Inference) client + Gemini embedder.
 
-Wraps the OpenAI-compatible / TEI-native HTTP API. The same wrapper is used in
-two places: the embedder calls `/embed`, the reranker calls `/rerank`.
+Wraps the OpenAI-compatible / TEI-native HTTP API for embed + rerank. Also
+provides `GeminiEmbedder` for use when TEI isn't running locally — Gemini
+text-embedding-004 has a free tier and 768-dim vectors.
 
 Failure handling: tenacity retries on 5xx and transport errors. 4xx fail fast.
 """
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import httpx
@@ -147,3 +149,79 @@ class TEIReranker(TEIEmbedder):
                 data = r.json()
                 return [(item["index"], item["score"]) for item in data]
         raise TEIError("TEI rerank retries exhausted")  # pragma: no cover
+
+
+# --- Gemini embedder ------------------------------------------------------
+
+class GeminiEmbedder:
+    """Async embedder using Google AI Studio's text-embedding-004 (768-dim).
+
+    Free-tier-friendly. Used when TEI isn't running locally — common for
+    portfolio demos where a GPU isn't available.
+    """
+
+    embed_dim = 768
+    model = "gemini-text-embedding-004"
+
+    def __init__(
+        self,
+        model_name: str = "text-embedding-004",
+        api_key: str | None = None,
+        timeout: float = 30.0,
+        max_retries: int = 3,
+        batch_size: int = 50,
+    ) -> None:
+        key = api_key or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+        if not key:
+            raise RuntimeError(
+                "GeminiEmbedder needs GOOGLE_API_KEY (or GEMINI_API_KEY) in env"
+            )
+        self._key = key
+        self._model_name = model_name
+        self._timeout = timeout
+        self._max_retries = max_retries
+        self._batch_size = batch_size
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+
+        out: list[list[float]] = []
+        for i in range(0, len(texts), self._batch_size):
+            batch = texts[i : i + self._batch_size]
+            out.extend(await self._embed_batch(batch))
+        return out
+
+    async def _embed_batch(self, texts: list[str]) -> list[list[float]]:
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/"
+            f"models/{self._model_name}:batchEmbedContents?key={self._key}"
+        )
+        payload = {
+            "requests": [
+                {
+                    "model": f"models/{self._model_name}",
+                    "content": {"parts": [{"text": t}]},
+                }
+                for t in texts
+            ]
+        }
+
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(self._max_retries),
+            wait=wait_exponential(multiplier=0.5, max=4.0),
+            retry=retry_if_exception_type((httpx.TransportError, httpx.HTTPStatusError)),
+            reraise=True,
+        ):
+            with attempt:
+                async with httpx.AsyncClient(timeout=self._timeout) as client:
+                    r = await client.post(url, json=payload)
+                if r.status_code == 429 or 500 <= r.status_code < 600:
+                    r.raise_for_status()
+                if r.status_code >= 400:
+                    raise TEIError(
+                        f"gemini embeddings {r.status_code}: {r.text[:200]}"
+                    )
+                data = r.json()
+                return [e["values"] for e in data.get("embeddings", [])]
+        raise TEIError("Gemini embed retries exhausted")  # pragma: no cover

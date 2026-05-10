@@ -13,6 +13,7 @@ from pydantic import Field, field_validator
 
 from bizpulse.models.citations import Citation
 from bizpulse.models.common import BusinessId, ChunkId, StrictModel, TenantId
+from bizpulse.models.compliance import ComplianceReport
 
 ChannelSlug = Literal[
     "google_search",
@@ -137,6 +138,10 @@ class MarketingStrategy(StrictModel):
     recommendations: list[Recommendation] = Field(min_length=1)
     overall_confidence: float = Field(ge=0.0, le=1.0)
     summary: str = Field(min_length=1, description="3-5 sentence executive summary.")
+    compliance_report: ComplianceReport | None = Field(
+        default=None,
+        description="Attached by the compliance_checker agent after synthesis. None when compliance was skipped.",
+    )
 
     @field_validator("recommendations")
     @classmethod

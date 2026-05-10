@@ -160,7 +160,7 @@ class PostgresStore:
             cur.execute(
                 "INSERT INTO runs (id, tenant_id, business_id, status) "
                 "VALUES (%s, %s, %s, 'pending') "
-                "RETURNING id, tenant_id, business_id, status, started_at, finished_at, error",
+                "RETURNING id, tenant_id, business_id, status, started_at, finished_at, error, output",
                 (str(run_id), str(tenant_id), str(business_id)),
             )
             row = cur.fetchone()
@@ -170,7 +170,7 @@ class PostgresStore:
     def get_run(self, run_id: UUID) -> RunRecord | None:
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT id, tenant_id, business_id, status, started_at, finished_at, error "
+                "SELECT id, tenant_id, business_id, status, started_at, finished_at, error, output "
                 "FROM runs WHERE id = %s",
                 (str(run_id),),
             )
@@ -190,7 +190,7 @@ class PostgresStore:
                 "UPDATE runs SET status = %s, error = %s, "
                 "finished_at = COALESCE(%s, finished_at) "
                 "WHERE id = %s "
-                "RETURNING id, tenant_id, business_id, status, started_at, finished_at, error",
+                "RETURNING id, tenant_id, business_id, status, started_at, finished_at, error, output",
                 (status, error, finished, str(run_id)),
             )
             row = cur.fetchone()
@@ -201,7 +201,7 @@ class PostgresStore:
     def list_runs_for_business(self, business_id: BusinessId) -> list[RunRecord]:
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT id, tenant_id, business_id, status, started_at, finished_at, error "
+                "SELECT id, tenant_id, business_id, status, started_at, finished_at, error, output "
                 "FROM runs WHERE business_id = %s ORDER BY started_at DESC",
                 (str(business_id),),
             )
@@ -242,7 +242,15 @@ def _row_to_business(row: Iterable) -> Business:
 
 
 def _row_to_run(row: Iterable) -> RunRecord:
-    rid, tid, biz_id, status, started_at, finished_at, error = row
+    rid, tid, biz_id, status, started_at, finished_at, error, output = row
+    final_output = None
+    if output is not None:
+        # output is JSONB; psycopg returns it as a parsed dict already.
+        try:
+            from bizpulse.models.strategy import MarketingStrategy
+            final_output = MarketingStrategy.model_validate(output)
+        except Exception:  # noqa: BLE001 — old-shape rows shouldn't crash GET /runs/{id}
+            final_output = None
     return RunRecord(
         id=rid,
         tenant_id=tid,
@@ -252,5 +260,5 @@ def _row_to_run(row: Iterable) -> RunRecord:
         finished_at=finished_at,
         error=error,
         agent_traces=[],
-        final_output=None,
+        final_output=final_output,
     )
