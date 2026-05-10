@@ -343,8 +343,24 @@ async def run_analysis_background(
             pass
 
     _persist_final_output(store=store, run_id=run_id, strategy=strategy)
+    # Persist cost / token totals from the runner's accumulators.
+    try:
+        store.update_run_usage(  # type: ignore[arg-type]
+            run_id,
+            cost_usd=runner.cumulative_cost_usd,
+            input_tokens=runner.cumulative_input_tokens,
+            output_tokens=runner.cumulative_output_tokens,
+            llm_calls=runner.cumulative_llm_calls,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("runner.usage.persist_failed", error=str(exc)[:200])
     _set("complete")
-    log.info("runner.analyze.complete", run_id=str(run_id))
+    log.info(
+        "runner.analyze.complete",
+        run_id=str(run_id),
+        cost_usd=round(runner.cumulative_cost_usd, 6),
+        llm_calls=runner.cumulative_llm_calls,
+    )
 
 
 def _persist_final_output(*, store: Store, run_id: UUID, strategy) -> None:

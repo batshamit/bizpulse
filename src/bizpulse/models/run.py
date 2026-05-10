@@ -28,6 +28,8 @@ class RunRecord(StrictModel):
 
     The `agent_traces` list is what the failure-replay debug UI reads.
     `final_output` is None until the Critic accepts the synthesis.
+    Cost / token totals are populated by runner_service after the LangGraph
+    completes, summing across every Council call.
     """
 
     id: RunId
@@ -39,3 +41,7 @@ class RunRecord(StrictModel):
     agent_traces: list[AgentTrace] = Field(default_factory=list)
     error: str | None = None
     final_output: MarketingStrategy | None = None
+    total_input_tokens: int = Field(default=0, ge=0)
+    total_output_tokens: int = Field(default=0, ge=0)
+    total_cost_usd: float = Field(default=0.0, ge=0.0)
+    llm_call_count: int = Field(default=0, ge=0)

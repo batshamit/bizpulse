@@ -1,15 +1,14 @@
 """Operator (admin) endpoints — visible to a single shared key, NOT a tenant.
 
-Authentication: BIZPULSE_ADMIN_KEY env var. Anyone with the key can:
-  - list every tenant with usage stats
-  - patch a tenant's daily_limit_override / suspended / name / notes
-  - "impersonate" a tenant (returns its api_key so the GUI can swap session)
-  - inspect all runs across the system
+Authentication: BIZPULSE_ADMIN_KEY env var. If BIZPULSE_ADMIN_TOTP_SECRET
+is also set, requests must additionally pass a valid 6-digit TOTP code
+in the X-Admin-TOTP header (Google Authenticator / 1Password / Authy
+compatible). When TOTP is enabled, the key alone is insufficient.
 
-Why a separate key (not 'admin tenant'): operators aren't tenants, and we
-don't want admin-level powers tied to a tenant row that an attacker who
-breached that tenant's api_key could exploit. The admin key is held only
-by the platform operator.
+Why a separate key (not an "admin tenant"): operators aren't tenants, and
+we don't want admin-level powers tied to a tenant row that an attacker
+who breached that tenant's api_key could exploit. The admin key is held
+only by the platform operator.
 
 Endpoints are namespaced under /v1/admin/ and gated by `require_admin`.
 """
@@ -21,7 +20,7 @@ import os
 from datetime import timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from bizpulse.api.dependencies import get_store
@@ -38,13 +37,41 @@ def _admin_key() -> str | None:
     return raw or None
 
 
+def _totp_secret() -> str | None:
+    raw = os.environ.get("BIZPULSE_ADMIN_TOTP_SECRET", "").strip()
+    return raw or None
+
+
+def _verify_totp(code: str | None) -> bool:
+    """Verify a TOTP code against the configured secret. Returns False on
+    bad code, missing pyotp, or absent secret. The caller decides what to
+    do with the result."""
+    if not code:
+        return False
+    secret = _totp_secret()
+    if not secret:
+        return False
+    try:
+        import pyotp  # type: ignore[import-untyped]
+    except ImportError:
+        return False
+    try:
+        totp = pyotp.TOTP(secret)
+        return bool(totp.verify(code, valid_window=1))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def require_admin(
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+    x_admin_totp: str | None = Header(default=None, alias="X-Admin-TOTP"),
 ) -> None:
     """Block requests that don't carry the operator's admin key.
 
     If BIZPULSE_ADMIN_KEY isn't set, all admin endpoints return 503 with a
     clear message — we don't want to silently expose them when misconfigured.
+
+    If BIZPULSE_ADMIN_TOTP_SECRET is set, X-Admin-TOTP must also pass.
     """
     expected = _admin_key()
     if expected is None:
@@ -57,6 +84,12 @@ def require_admin(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid X-Admin-Key.",
             headers={"WWW-Authenticate": "AdminKey"},
+        )
+    if _totp_secret() is not None and not _verify_totp(x_admin_totp):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Valid TOTP code required (X-Admin-TOTP).",
+            headers={"WWW-Authenticate": "AdminTOTP"},
         )
 
 
@@ -76,6 +109,7 @@ class TenantWithUsage(BaseModel):
     runs_today: int
     runs_total: int
     effective_daily_limit: int
+    total_cost_usd: float = 0.0
 
 
 class UpdateTenantRequest(BaseModel):
@@ -100,6 +134,33 @@ class AdminStatusResponse(BaseModel):
     enabled: bool
     """Whether BIZPULSE_ADMIN_KEY is configured. Public — does not reveal the key."""
 
+    requires_totp: bool = False
+    """Whether BIZPULSE_ADMIN_TOTP_SECRET is set; the GUI uses this to show
+    the TOTP field."""
+
+
+class TenantUsageDetail(BaseModel):
+    total_cost_usd: float
+    total_input_tokens: int
+    total_output_tokens: int
+    llm_call_count: int
+    runs_total: int
+
+
+class CleanupRequest(BaseModel):
+    """Bulk-delete tenants whose name matches a POSIX regex."""
+
+    pattern: str = Field(min_length=1, max_length=200, description="POSIX regex; matched against tenants.name (case-sensitive).")
+    dry_run: bool = Field(default=True, description="If true, return matches without deleting.")
+    confirm_token: str | None = Field(default=None, description="Required (must equal 'DELETE') when dry_run=false.")
+
+
+class CleanupResponse(BaseModel):
+    pattern: str
+    dry_run: bool
+    matched: list[dict]
+    deleted_count: int
+
 
 # --- routes ----------------------------------------------------------------
 
@@ -110,7 +171,10 @@ class AdminStatusResponse(BaseModel):
     description="Public health-check the GUI uses to decide whether to surface the Admin tab on the login page.",
 )
 def admin_status() -> AdminStatusResponse:
-    return AdminStatusResponse(enabled=_admin_key() is not None)
+    return AdminStatusResponse(
+        enabled=_admin_key() is not None,
+        requires_totp=_totp_secret() is not None,
+    )
 
 
 def _to_tenant_with_usage(t: Tenant, store: Store) -> TenantWithUsage:
@@ -120,6 +184,12 @@ def _to_tenant_with_usage(t: Tenant, store: Store) -> TenantWithUsage:
     effective_limit = (
         t.daily_limit_override if t.daily_limit_override is not None else daily_limit()
     )
+    cost_total = 0.0
+    try:
+        usage = store.usage_for_tenant(t.id)
+        cost_total = float(usage.get("total_cost_usd", 0.0) or 0.0)
+    except Exception:  # noqa: BLE001 — pre-migration storage may not have it
+        pass
     return TenantWithUsage(
         id=str(t.id),
         name=t.name,
@@ -132,6 +202,7 @@ def _to_tenant_with_usage(t: Tenant, store: Store) -> TenantWithUsage:
         runs_today=runs_today,
         runs_total=runs_total,
         effective_daily_limit=effective_limit,
+        total_cost_usd=cost_total,
     )
 
 

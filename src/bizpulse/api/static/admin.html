@@ -20,23 +20,31 @@
       <span style="font-family:'Inter'; font-size:0.85rem; color:var(--bzp-accent); font-weight:500; margin-left:0.5rem; letter-spacing:0.04em; text-transform:uppercase;">admin</span>
     </a>
     <div class="bzp-nav-links">
-      <a href="/ui/admin.html" class="active">Tenants</a>
-      <a href="#" @click.prevent="$store.admin && $store.admin.signOut()" x-show="localStorage.getItem('bizpulse.admin_key')" style="color:var(--bzp-ink-soft);">Sign out</a>
+      <a href="/ui/admin.html" class="active">Admin</a>
+      <a href="#" @click.prevent="document.dispatchEvent(new Event('admin:signout'))" x-show="localStorage.getItem('bizpulse.admin_key')" style="color:var(--bzp-ink-soft);">Sign out</a>
     </div>
   </div>
 </nav>
 
-<div class="bzp-container" x-data="adminPage()">
+<div class="bzp-container" x-data="adminPage()" @admin:signout.window="signOut()">
 
   <!-- LOGIN MODE -->
   <template x-if="!authed">
     <div style="max-width:480px; margin:5rem auto;">
       <h1 class="bzp-page-title">Operator sign-in</h1>
-      <div class="bzp-page-subtitle">Enter your <code>BIZPULSE_ADMIN_KEY</code>. This is a different key from per-tenant api keys.</div>
+      <div class="bzp-page-subtitle">Enter your <code>BIZPULSE_ADMIN_KEY</code><span x-show="requiresTotp"> and a 6-digit TOTP code from your authenticator app</span>.</div>
       <div class="bzp-card">
         <form @submit.prevent="loginAdmin()" autocomplete="off">
           <label class="bzp-label" for="adminKey">Admin key</label>
           <input id="adminKey" x-model="adminKey" type="password" placeholder="..." class="bzp-input" required autofocus>
+
+          <template x-if="requiresTotp">
+            <div style="margin-top:1rem;">
+              <label class="bzp-label" for="totp">TOTP code <span style="color:var(--bzp-ink-faint); font-weight:400;">(6 digits)</span></label>
+              <input id="totp" x-model="totp" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="123456" class="bzp-input" required>
+            </div>
+          </template>
+
           <button :disabled="busy" class="bzp-btn bzp-btn-primary" style="width:100%; margin-top:1.25rem; justify-content:center;">
             <span x-show="!busy">Sign in →</span>
             <span x-show="busy">Verifying…</span>
@@ -53,8 +61,8 @@
   <!-- AUTHED MODE -->
   <template x-if="authed">
     <div>
-      <h1 class="bzp-page-title">Tenants</h1>
-      <div class="bzp-page-subtitle">Operator view across every tenant. Edit limits, suspend, or sign in as them.</div>
+      <h1 class="bzp-page-title">Admin</h1>
+      <div class="bzp-page-subtitle">Operator view across every tenant.</div>
 
       <div class="bzp-grid-stats">
         <div class="bzp-stat">
@@ -70,17 +78,25 @@
           <div class="bzp-stat-value" x-text="tenants.filter(t => t.suspended).length"></div>
         </div>
         <div class="bzp-stat">
-          <div class="bzp-stat-label">Total runs</div>
-          <div class="bzp-stat-value" x-text="tenants.reduce((s,t) => s+t.runs_total, 0)"></div>
+          <div class="bzp-stat-label">Total cost</div>
+          <div class="bzp-stat-value" x-text="'$' + tenants.reduce((s,t)=> s+(t.total_cost_usd||0), 0).toFixed(4)"></div>
         </div>
       </div>
 
-      <div class="bzp-card" style="padding:0;">
+      <!-- tabs -->
+      <div style="display:flex; gap:0.4rem; border-bottom:1px solid var(--bzp-border); margin-bottom:1.5rem;">
+        <template x-for="t in ['tenants', 'audit', 'cleanup']" :key="t">
+          <button @click="activeTab=t"
+                  :style="activeTab===t ? 'border-bottom:2px solid var(--bzp-accent); color:var(--bzp-accent); font-weight:500;' : 'color:var(--bzp-ink-soft);'"
+                  style="background:none; border:none; padding:0.7rem 1rem; cursor:pointer; font-size:0.95rem; text-transform:capitalize;"
+                  x-text="t"></button>
+        </template>
+      </div>
+
+      <!-- TENANTS tab -->
+      <div x-show="activeTab === 'tenants'" class="bzp-card" style="padding:0;">
         <template x-if="busy">
           <div class="bzp-empty">Loading…</div>
-        </template>
-        <template x-if="!busy && tenants.length === 0">
-          <div class="bzp-empty">No tenants yet.</div>
         </template>
         <template x-if="!busy && tenants.length > 0">
           <table class="bzp-table">
@@ -88,7 +104,8 @@
               <th>Tenant</th>
               <th>Slug</th>
               <th>Created</th>
-              <th>Today</th>
+              <th>Runs</th>
+              <th>Cost</th>
               <th>Limit</th>
               <th>Status</th>
               <th></th>
@@ -107,6 +124,7 @@
                     <span style="color:var(--bzp-ink-faint);"> / </span>
                     <span x-text="t.runs_total" style="color:var(--bzp-ink-faint); font-size:0.85rem;"></span>
                   </td>
+                  <td style="font-family:monospace; font-size:0.82rem;" x-text="'$' + (t.total_cost_usd || 0).toFixed(4)"></td>
                   <td>
                     <input type="number" min="0" max="1000"
                            :value="t.daily_limit_override ?? ''"
@@ -116,19 +134,18 @@
                            style="width:90px; padding:0.3rem 0.5rem; font-size:0.85rem;">
                   </td>
                   <td>
-                    <template x-if="t.suspended">
-                      <span class="bzp-pill bzp-pill-danger">suspended</span>
-                    </template>
-                    <template x-if="!t.suspended">
-                      <span class="bzp-pill bzp-pill-success">active</span>
-                    </template>
+                    <template x-if="t.suspended"><span class="bzp-pill bzp-pill-danger">suspended</span></template>
+                    <template x-if="!t.suspended"><span class="bzp-pill bzp-pill-success">active</span></template>
                   </td>
                   <td style="text-align:right; white-space:nowrap;">
-                    <button @click="toggleSuspend(t)" class="bzp-btn bzp-btn-ghost" style="padding:0.3rem 0.7rem; font-size:0.8rem;">
+                    <button @click="toggleSuspend(t)" class="bzp-btn bzp-btn-ghost" style="padding:0.3rem 0.6rem; font-size:0.78rem;">
                       <span x-show="!t.suspended">Suspend</span>
                       <span x-show="t.suspended">Activate</span>
                     </button>
-                    <button @click="impersonate(t)" class="bzp-btn bzp-btn-primary" style="padding:0.3rem 0.7rem; font-size:0.8rem; margin-left:0.3rem;">
+                    <button @click="deleteOne(t)" class="bzp-btn bzp-btn-ghost" style="padding:0.3rem 0.6rem; font-size:0.78rem; color:var(--bzp-danger); border-color:var(--bzp-danger-soft);">
+                      Delete
+                    </button>
+                    <button @click="impersonate(t)" class="bzp-btn bzp-btn-primary" style="padding:0.3rem 0.7rem; font-size:0.78rem;">
                       Sign in as →
                     </button>
                   </td>
@@ -136,6 +153,81 @@
               </template>
             </tbody>
           </table>
+        </template>
+      </div>
+
+      <!-- AUDIT tab -->
+      <div x-show="activeTab === 'audit'" class="bzp-card" style="padding:0;">
+        <template x-if="!auditLoaded">
+          <div class="bzp-empty">
+            <button @click="loadAudit()" class="bzp-btn bzp-btn-primary">Load audit log</button>
+          </div>
+        </template>
+        <template x-if="auditLoaded && audit.length === 0">
+          <div class="bzp-empty">No audit entries yet.</div>
+        </template>
+        <template x-if="auditLoaded && audit.length > 0">
+          <table class="bzp-table">
+            <thead><tr>
+              <th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>IP</th>
+            </tr></thead>
+            <tbody>
+              <template x-for="e in audit" :key="e.id">
+                <tr>
+                  <td style="color:var(--bzp-ink-soft); font-size:0.85rem; white-space:nowrap;" x-text="fmtTime(e.occurred_at)"></td>
+                  <td style="font-family:monospace; font-size:0.82rem;" x-text="e.actor"></td>
+                  <td>
+                    <span class="bzp-pill bzp-pill-accent" x-text="e.action"></span>
+                  </td>
+                  <td style="font-family:monospace; font-size:0.78rem; color:var(--bzp-ink-soft);">
+                    <span x-show="e.target_kind" x-text="e.target_kind + ': '"></span>
+                    <span x-text="e.target_id ? (e.target_id.length > 36 ? e.target_id.slice(0,36)+'…' : e.target_id) : '—'"></span>
+                  </td>
+                  <td style="font-family:monospace; font-size:0.78rem; color:var(--bzp-ink-soft); max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" x-text="JSON.stringify(e.details)" :title="JSON.stringify(e.details, null, 2)"></td>
+                  <td style="font-family:monospace; font-size:0.78rem; color:var(--bzp-ink-faint);" x-text="e.request_ip || '—'"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </template>
+      </div>
+
+      <!-- CLEANUP tab -->
+      <div x-show="activeTab === 'cleanup'" class="bzp-card">
+        <h2 style="margin-top:0;">Bulk delete tenants</h2>
+        <div style="color:var(--bzp-ink-soft); font-size:0.9rem; margin-bottom:1rem;">
+          POSIX regex matched against <code>tenants.name</code>. Examples:
+          <code>^(pytest|A|B|gated test)</code>,
+          <code>^(run \d|server-side|Live Tunnel|Tunnel Demo)</code>.
+          Deletes cascade to businesses + runs.
+        </div>
+        <label class="bzp-label" for="cleanupPattern">Pattern</label>
+        <input id="cleanupPattern" x-model="cleanupPattern" type="text" class="bzp-input"
+               placeholder="^(pytest|A|B|run |server-side |Live |Tunnel )">
+        <div style="margin-top:1rem; display:flex; gap:0.6rem; align-items:center;">
+          <button @click="dryRunCleanup()" :disabled="cleanupBusy || !cleanupPattern" class="bzp-btn bzp-btn-ghost">
+            🔍 Preview matches (dry run)
+          </button>
+          <button @click="confirmAndCleanup()" :disabled="cleanupBusy || !cleanupPattern || cleanupPreview.length === 0"
+                  class="bzp-btn bzp-btn-primary" style="background:var(--bzp-danger);">
+            🗑 Delete <span x-text="cleanupPreview.length || 0"></span> tenant(s)
+          </button>
+          <span x-show="cleanupBusy" style="color:var(--bzp-ink-faint);">working…</span>
+        </div>
+        <template x-if="cleanupPreview.length > 0">
+          <div style="margin-top:1.2rem; max-height:340px; overflow-y:auto; border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:0.6rem;">
+            <div style="font-size:0.85rem; color:var(--bzp-ink-soft); margin-bottom:0.4rem;">
+              <strong x-text="cleanupPreview.length"></strong> matches:
+            </div>
+            <template x-for="m in cleanupPreview.slice(0,200)" :key="m.id">
+              <div style="font-family:monospace; font-size:0.78rem; color:var(--bzp-ink-soft); padding:0.2rem 0; border-bottom:1px solid var(--bzp-border-soft);">
+                <span x-text="m.name"></span> · <span style="color:var(--bzp-ink-faint);" x-text="m.slug"></span>
+              </div>
+            </template>
+            <div x-show="cleanupPreview.length > 200" style="font-size:0.78rem; color:var(--bzp-ink-faint); margin-top:0.5rem;">
+              … and <span x-text="cleanupPreview.length - 200"></span> more
+            </div>
+          </div>
         </template>
       </div>
 

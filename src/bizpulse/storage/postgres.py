@@ -209,7 +209,8 @@ class PostgresStore:
             cur.execute(
                 "INSERT INTO runs (id, tenant_id, business_id, status) "
                 "VALUES (%s, %s, %s, 'pending') "
-                "RETURNING id, tenant_id, business_id, status, started_at, finished_at, error, output",
+                "RETURNING id, tenant_id, business_id, status, started_at, finished_at, error, output, "
+                "          total_input_tokens, total_output_tokens, total_cost_usd, llm_call_count",
                 (str(run_id), str(tenant_id), str(business_id)),
             )
             row = cur.fetchone()
@@ -219,7 +220,8 @@ class PostgresStore:
     def get_run(self, run_id: UUID) -> RunRecord | None:
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT id, tenant_id, business_id, status, started_at, finished_at, error, output "
+                "SELECT id, tenant_id, business_id, status, started_at, finished_at, error, output, "
+                "       total_input_tokens, total_output_tokens, total_cost_usd, llm_call_count "
                 "FROM runs WHERE id = %s",
                 (str(run_id),),
             )
@@ -239,7 +241,8 @@ class PostgresStore:
                 "UPDATE runs SET status = %s, error = %s, "
                 "finished_at = COALESCE(%s, finished_at) "
                 "WHERE id = %s "
-                "RETURNING id, tenant_id, business_id, status, started_at, finished_at, error, output",
+                "RETURNING id, tenant_id, business_id, status, started_at, finished_at, error, output, "
+                "          total_input_tokens, total_output_tokens, total_cost_usd, llm_call_count",
                 (status, error, finished, str(run_id)),
             )
             row = cur.fetchone()
@@ -270,7 +273,8 @@ class PostgresStore:
     def list_runs_for_business(self, business_id: BusinessId) -> list[RunRecord]:
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT id, tenant_id, business_id, status, started_at, finished_at, error, output "
+                "SELECT id, tenant_id, business_id, status, started_at, finished_at, error, output, "
+                "       total_input_tokens, total_output_tokens, total_cost_usd, llm_call_count "
                 "FROM runs WHERE business_id = %s ORDER BY started_at DESC",
                 (str(business_id),),
             )
@@ -330,14 +334,19 @@ def _row_to_business(row: Iterable) -> Business:
 
 
 def _row_to_run(row: Iterable) -> RunRecord:
-    rid, tid, biz_id, status, started_at, finished_at, error, output = row
+    cols = list(row)
+    rid, tid, biz_id, status, started_at, finished_at, error, output = cols[:8]
+    # Optional cost/token columns — present after migration 002.
+    total_input = int(cols[8]) if len(cols) > 8 and cols[8] is not None else 0
+    total_output = int(cols[9]) if len(cols) > 9 and cols[9] is not None else 0
+    total_cost = float(cols[10]) if len(cols) > 10 and cols[10] is not None else 0.0
+    llm_calls = int(cols[11]) if len(cols) > 11 and cols[11] is not None else 0
     final_output = None
     if output is not None:
-        # output is JSONB; psycopg returns it as a parsed dict already.
         try:
             from bizpulse.models.strategy import MarketingStrategy
             final_output = MarketingStrategy.model_validate(output)
-        except Exception:  # noqa: BLE001 — old-shape rows shouldn't crash GET /runs/{id}
+        except Exception:  # noqa: BLE001
             final_output = None
     return RunRecord(
         id=rid,
@@ -349,4 +358,8 @@ def _row_to_run(row: Iterable) -> RunRecord:
         error=error,
         agent_traces=[],
         final_output=final_output,
+        total_input_tokens=total_input,
+        total_output_tokens=total_output,
+        total_cost_usd=total_cost,
+        llm_call_count=llm_calls,
     )

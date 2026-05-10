@@ -169,7 +169,11 @@ def extract_json(text: str) -> object:
 # ---- runner ------------------------------------------------------------
 
 class AgentRunner:
-    """Bind a tenant context (retrieval, prompts, council) and run agents."""
+    """Bind a tenant context (retrieval, prompts, council) and run agents.
+
+    Tracks cumulative LLM usage across every run() call so callers
+    (runner_service) can persist per-run cost/token totals to Postgres.
+    """
 
     def __init__(
         self,
@@ -192,6 +196,26 @@ class AgentRunner:
                 except FileNotFoundError:
                     log.warning("agent_runner.unknown_industry", industry=industry)
             self.prompts = PromptBuilder(industry_pack=pack)
+        # Cumulative usage across all run() invocations on this instance.
+        self.cumulative_cost_usd: float = 0.0
+        self.cumulative_input_tokens: int = 0
+        self.cumulative_output_tokens: int = 0
+        self.cumulative_llm_calls: int = 0
+
+    def _account_council_result(self, council_result: CouncilResult) -> None:
+        """Add a CouncilResult's usage to the running totals."""
+        self.cumulative_cost_usd += council_result.cost_usd
+        for proposals in council_result.rounds:
+            for p in proposals:
+                if p.error:
+                    continue
+                self.cumulative_llm_calls += 1
+        # The judge's synthesis call is one extra LLM call per debate.
+        if council_result.final:
+            self.cumulative_llm_calls += 1
+        # Input/output tokens aren't surfaced on CouncilResult yet (they're
+        # on each CompletionResult). For now we rely on runner_service to
+        # supplement from a side-channel if vendor-tracked usage is needed.
 
     async def run(
         self,
@@ -229,6 +253,7 @@ class AgentRunner:
 
         # 3. Run debate.
         council_result = await self.council.debate(system=system, user=user)
+        self._account_council_result(council_result)
 
         # 4. Parse + validate output.
         repaired = False

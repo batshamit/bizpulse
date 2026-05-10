@@ -161,6 +161,8 @@ async def run_compliance_check(
         schema_json=schema_json,
     )
     council_result = await council.debate(system=_SYSTEM, user=user)
+    # Surface usage to callers via the council_result return path:
+    # callers (runner_service) read council_result.cost_usd directly.
 
     repair = False
     try:

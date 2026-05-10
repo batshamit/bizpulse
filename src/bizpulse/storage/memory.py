@@ -70,6 +70,104 @@ class InMemoryStore:
     def list_tenants(self) -> list[Tenant]:
         return list(self._tenants.values())
 
+    def usage_for_tenant(self, tenant_id: TenantId) -> dict[str, float | int]:
+        cost = 0.0
+        in_tok = 0
+        out_tok = 0
+        calls = 0
+        for r in self._runs.values():
+            if r.tenant_id != tenant_id:
+                continue
+            cost += r.total_cost_usd
+            in_tok += r.total_input_tokens
+            out_tok += r.total_output_tokens
+            calls += r.llm_call_count
+        return {
+            "total_cost_usd": cost,
+            "total_input_tokens": in_tok,
+            "total_output_tokens": out_tok,
+            "llm_call_count": calls,
+        }
+
+    def update_run_usage(
+        self,
+        run_id: UUID,
+        *,
+        cost_usd: float,
+        input_tokens: int,
+        output_tokens: int,
+        llm_calls: int,
+    ) -> None:
+        with self._lock:
+            r = self._runs.get(run_id)
+            if r is None:
+                return
+            self._runs[run_id] = r.model_copy(update={
+                "total_cost_usd": cost_usd,
+                "total_input_tokens": input_tokens,
+                "total_output_tokens": output_tokens,
+                "llm_call_count": llm_calls,
+            })
+
+    def delete_tenant(self, tenant_id: TenantId) -> bool:
+        with self._lock:
+            t = self._tenants.pop(tenant_id, None)
+            if t is None:
+                return False
+            self._tenants_by_api_key.pop(t.api_key, None)
+            self._tenants_by_slug.pop(t.slug, None)
+            biz_ids = self._businesses_by_tenant.pop(tenant_id, [])
+            for bid in biz_ids:
+                self._businesses.pop(bid, None)
+                run_ids = self._runs_by_business.pop(bid, [])
+                for rid in run_ids:
+                    self._runs.pop(rid, None)
+            return True
+
+    def find_tenants_by_name_regex(self, pattern: str) -> list[dict]:
+        import re
+        try:
+            rx = re.compile(pattern)
+        except re.error:
+            return []
+        return [
+            {"id": str(t.id), "name": t.name, "slug": t.slug}
+            for t in sorted(self._tenants.values(), key=lambda x: x.created_at)
+            if rx.search(t.name)
+        ]
+
+    def delete_tenants_by_name_regex(self, pattern: str) -> list[dict]:
+        targets = self.find_tenants_by_name_regex(pattern)
+        for t in targets:
+            self.delete_tenant(UUID(t["id"]))
+        return targets
+
+    # ----- audit log (in-memory) ----------------------------------------
+
+    def insert_audit(self, **kw) -> UUID:
+        from datetime import datetime as _dt
+        from uuid import uuid4 as _u4
+        rec = {
+            "id": str(_u4()),
+            "occurred_at": _dt.now().isoformat(),
+            "actor": kw.get("actor", ""),
+            "action": kw.get("action", ""),
+            "target_kind": kw.get("target_kind"),
+            "target_id": kw.get("target_id"),
+            "details": kw.get("details") or {},
+            "request_ip": kw.get("request_ip"),
+        }
+        if not hasattr(self, "_audit"):
+            self._audit: list[dict] = []
+        self._audit.append(rec)
+        return UUID(rec["id"])
+
+    def list_audit(self, *, limit: int = 100, offset: int = 0) -> list[dict]:
+        if not hasattr(self, "_audit"):
+            return []
+        items = list(reversed(self._audit))
+        return items[offset:offset + limit]
+
     def update_tenant(
         self,
         tenant_id: TenantId,

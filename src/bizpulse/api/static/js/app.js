@@ -269,11 +269,17 @@ document.addEventListener('alpine:init', () => {
 
   // ---- admin ---------------------------------------------------------
 
+  function bzpAdminTotp() { return localStorage.getItem('bizpulse.admin_totp') || ''; }
+  function bzpSetAdminTotp(v) { localStorage.setItem('bizpulse.admin_totp', v); }
+  function bzpClearAdminTotp() { localStorage.removeItem('bizpulse.admin_totp'); }
+
   async function adminFetch(path, opts = {}) {
     const headers = Object.assign({}, opts.headers || {}, {
       'Content-Type': 'application/json',
       'X-Admin-Key': bzpAdminKey(),
     });
+    const totp = bzpAdminTotp();
+    if (totp) headers['X-Admin-TOTP'] = totp;
     const r = await fetch(path, Object.assign({}, opts, { headers }));
     const text = await r.text();
     let body; try { body = JSON.parse(text); } catch { body = text; }
@@ -284,26 +290,31 @@ document.addEventListener('alpine:init', () => {
   Alpine.data('adminPage', () => ({
     authed: false,
     enabled: true,
+    requiresTotp: false,
     adminKey: '',
+    totp: '',
     busy: false,
     error: '',
     tenants: [],
+    activeTab: 'tenants',
+    audit: [],
+    auditLoaded: false,
+    cleanupPattern: '',
+    cleanupPreview: [],
+    cleanupBusy: false,
 
     async init() {
-      // Check whether admin endpoints are enabled at all.
       try {
-        const status = await fetch('/v1/admin/status').then(r => r.json());
-        this.enabled = !!status.enabled;
+        const s = await fetch('/v1/admin/status').then(r => r.json());
+        this.enabled = !!s.enabled;
+        this.requiresTotp = !!s.requires_totp;
       } catch { this.enabled = false; }
 
-      // If we already have a stored admin key, verify it.
       if (bzpAdminKey()) {
         try {
           await this.load();
           this.authed = true;
-        } catch (e) {
-          bzpClearAdminKey();
-        }
+        } catch (e) { bzpClearAdminKey(); bzpClearAdminTotp(); }
       }
     },
 
@@ -312,10 +323,13 @@ document.addEventListener('alpine:init', () => {
       this.busy = true;
       try {
         bzpSetAdminKey(this.adminKey.trim());
+        if (this.requiresTotp) bzpSetAdminTotp(this.totp.trim());
+        else bzpClearAdminTotp();
         await this.load();
         this.authed = true;
       } catch (e) {
         bzpClearAdminKey();
+        bzpClearAdminTotp();
         this.error = e.message;
       } finally { this.busy = false; }
     },
@@ -327,8 +341,15 @@ document.addEventListener('alpine:init', () => {
       } finally { this.busy = false; }
     },
 
+    async loadAudit() {
+      try {
+        this.audit = await adminFetch('/v1/admin/audit?limit=200');
+        this.auditLoaded = true;
+      } catch (e) { bzpToast('Audit load failed: ' + e.message); }
+    },
+
     signOut() {
-      bzpClearAdminKey();
+      bzpClearAdminKey(); bzpClearAdminTotp();
       window.location.reload();
     },
 
@@ -336,6 +357,7 @@ document.addEventListener('alpine:init', () => {
       if (!iso) return '—';
       return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     },
+    fmtTime: bzpFmtTime,
 
     async patchLimit(tenant, raw) {
       const trimmed = String(raw).trim();
@@ -344,8 +366,7 @@ document.addEventListener('alpine:init', () => {
         : { daily_limit_override: parseInt(trimmed, 10) };
       try {
         const updated = await adminFetch(`/v1/admin/tenants/${tenant.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify(body),
+          method: 'PATCH', body: JSON.stringify(body),
         });
         Object.assign(tenant, updated);
         bzpToast(`Limit updated for ${tenant.name}`);
@@ -355,12 +376,20 @@ document.addEventListener('alpine:init', () => {
     async toggleSuspend(tenant) {
       try {
         const updated = await adminFetch(`/v1/admin/tenants/${tenant.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ suspended: !tenant.suspended }),
+          method: 'PATCH', body: JSON.stringify({ suspended: !tenant.suspended }),
         });
         Object.assign(tenant, updated);
         bzpToast((updated.suspended ? 'Suspended ' : 'Activated ') + tenant.name);
       } catch (e) { bzpToast('Update failed: ' + e.message); }
+    },
+
+    async deleteOne(tenant) {
+      if (!confirm(`Delete tenant "${tenant.name}" and all their businesses + runs? Cannot be undone.`)) return;
+      try {
+        await adminFetch(`/v1/admin/tenants/${tenant.id}`, { method: 'DELETE' });
+        this.tenants = this.tenants.filter(t => t.id !== tenant.id);
+        bzpToast(`Deleted ${tenant.name}`);
+      } catch (e) { bzpToast('Delete failed: ' + e.message); }
     },
 
     async impersonate(tenant) {
@@ -373,6 +402,44 @@ document.addEventListener('alpine:init', () => {
         bzpToast(`Signed in as ${r.name}`);
         setTimeout(() => { window.location.href = '/ui/dashboard.html'; }, 400);
       } catch (e) { bzpToast('Impersonate failed: ' + e.message); }
+    },
+
+    async dryRunCleanup() {
+      if (!this.cleanupPattern) return;
+      this.cleanupBusy = true;
+      try {
+        const r = await adminFetch('/v1/admin/tenants/cleanup', {
+          method: 'POST',
+          body: JSON.stringify({ pattern: this.cleanupPattern, dry_run: true }),
+        });
+        this.cleanupPreview = r.matched || [];
+        bzpToast(`Found ${this.cleanupPreview.length} match(es) — none deleted yet`);
+      } catch (e) { bzpToast('Preview failed: ' + e.message); }
+      finally { this.cleanupBusy = false; }
+    },
+
+    async confirmAndCleanup() {
+      if (!this.cleanupPattern || this.cleanupPreview.length === 0) return;
+      const ok = prompt(
+        `Type DELETE in capitals to permanently delete ${this.cleanupPreview.length} tenants (cascades to all their businesses + runs):`
+      );
+      if (ok !== 'DELETE') { bzpToast('Cancelled'); return; }
+      this.cleanupBusy = true;
+      try {
+        const r = await adminFetch('/v1/admin/tenants/cleanup', {
+          method: 'POST',
+          body: JSON.stringify({
+            pattern: this.cleanupPattern,
+            dry_run: false,
+            confirm_token: 'DELETE',
+          }),
+        });
+        bzpToast(`Deleted ${r.deleted_count} tenant(s)`);
+        this.cleanupPreview = [];
+        this.cleanupPattern = '';
+        await this.load();
+      } catch (e) { bzpToast('Delete failed: ' + e.message); }
+      finally { this.cleanupBusy = false; }
     },
   }));
 
