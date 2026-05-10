@@ -242,9 +242,12 @@ def get_tenant(
 def update_tenant(
     tenant_id: UUID,
     body: UpdateTenantRequest,
+    request: Request,
     _: None = Depends(require_admin),
     store: Store = Depends(get_store),
 ) -> TenantWithUsage:
+    from bizpulse.api.audit import record_audit
+    before = store.get_tenant(tenant_id)
     updated = store.update_tenant(
         tenant_id,
         name=body.name,
@@ -255,7 +258,110 @@ def update_tenant(
     )
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
+    if before is not None:
+        diff: dict[str, object] = {}
+        for field in ("name", "daily_limit_override", "suspended", "notes"):
+            old_v = getattr(before, field)
+            new_v = getattr(updated, field)
+            if old_v != new_v:
+                diff[field] = {"before": old_v, "after": new_v}
+        if diff:
+            record_audit(
+                store=store,
+                actor="admin",
+                action="tenant.update",
+                target_kind="tenant",
+                target_id=str(tenant_id),
+                details=diff,
+                request_ip=request.client.host if request.client else None,
+            )
     return _to_tenant_with_usage(updated, store)
+
+
+@router.delete(
+    "/tenants/{tenant_id}",
+    summary="Delete a single tenant (cascades to businesses + runs)",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_tenant(
+    tenant_id: UUID,
+    request: Request,
+    _: None = Depends(require_admin),
+    store: Store = Depends(get_store),
+) -> None:
+    from bizpulse.api.audit import record_audit
+    t = store.get_tenant(tenant_id)
+    if t is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
+    ok = store.delete_tenant(tenant_id)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
+    record_audit(
+        store=store,
+        actor="admin",
+        action="tenant.delete",
+        target_kind="tenant",
+        target_id=str(tenant_id),
+        details={"name": t.name, "slug": t.slug},
+        request_ip=request.client.host if request.client else None,
+    )
+
+
+@router.post(
+    "/tenants/cleanup",
+    response_model=CleanupResponse,
+    summary="Bulk-delete tenants by name regex (dry_run by default)",
+    description=(
+        "POSIX regex matched against `tenants.name`. dry_run=true (default) "
+        "returns matches without deleting. Set dry_run=false AND "
+        "confirm_token='DELETE' to actually remove them. Cascades to all "
+        "businesses + runs + run_steps via FK ON DELETE CASCADE."
+    ),
+)
+def cleanup_tenants(
+    body: CleanupRequest,
+    request: Request,
+    _: None = Depends(require_admin),
+    store: Store = Depends(get_store),
+) -> CleanupResponse:
+    from bizpulse.api.audit import record_audit
+
+    if not body.dry_run and body.confirm_token != "DELETE":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="confirm_token must equal 'DELETE' when dry_run=false.",
+        )
+
+    try:
+        if body.dry_run:
+            matched = store.find_tenants_by_name_regex(body.pattern)
+            deleted = 0
+        else:
+            matched = store.delete_tenants_by_name_regex(body.pattern)
+            deleted = len(matched)
+    except Exception as exc:  # noqa: BLE001 — bad regex / SQL error
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"cleanup failed: {exc!s}",
+        )
+
+    if not body.dry_run:
+        record_audit(
+            store=store,
+            actor="admin",
+            action="tenant.cleanup",
+            target_kind="tenant",
+            target_id=body.pattern,
+            details={"deleted_count": deleted, "matched_names": [m["name"] for m in matched[:50]]},
+            request_ip=request.client.host if request.client else None,
+        )
+
+    return CleanupResponse(
+        pattern=body.pattern,
+        dry_run=body.dry_run,
+        matched=matched,
+        deleted_count=deleted,
+    )
 
 
 @router.post(
@@ -271,12 +377,23 @@ def update_tenant(
 )
 def impersonate(
     tenant_id: UUID,
+    request: Request,
     _: None = Depends(require_admin),
     store: Store = Depends(get_store),
 ) -> ImpersonateResponse:
+    from bizpulse.api.audit import record_audit
     t = store.get_tenant(tenant_id)
     if t is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
+    record_audit(
+        store=store,
+        actor="admin",
+        action="tenant.impersonate",
+        target_kind="tenant",
+        target_id=str(tenant_id),
+        details={"name": t.name, "slug": t.slug},
+        request_ip=request.client.host if request.client else None,
+    )
     return ImpersonateResponse(
         tenant_id=str(t.id),
         name=t.name,

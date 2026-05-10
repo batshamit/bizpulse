@@ -250,6 +250,111 @@ class PostgresStore:
                 raise KeyError(f"unknown run: {run_id}")
         return _row_to_run(row)
 
+    def usage_for_tenant(self, tenant_id: TenantId) -> dict[str, float | int]:
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT COALESCE(SUM(total_cost_usd), 0)::float, "
+                "       COALESCE(SUM(total_input_tokens), 0)::bigint, "
+                "       COALESCE(SUM(total_output_tokens), 0)::bigint, "
+                "       COALESCE(SUM(llm_call_count), 0)::int "
+                "FROM runs WHERE tenant_id = %s",
+                (str(tenant_id),),
+            )
+            row = cur.fetchone() or (0.0, 0, 0, 0)
+        return {
+            "total_cost_usd": float(row[0] or 0.0),
+            "total_input_tokens": int(row[1] or 0),
+            "total_output_tokens": int(row[2] or 0),
+            "llm_call_count": int(row[3] or 0),
+        }
+
+    def update_run_usage(
+        self,
+        run_id: UUID,
+        *,
+        cost_usd: float,
+        input_tokens: int,
+        output_tokens: int,
+        llm_calls: int,
+    ) -> None:
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE runs SET total_cost_usd = %s, total_input_tokens = %s, "
+                "                total_output_tokens = %s, llm_call_count = %s "
+                "WHERE id = %s",
+                (cost_usd, input_tokens, output_tokens, llm_calls, str(run_id)),
+            )
+
+    def delete_tenant(self, tenant_id: TenantId) -> bool:
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM tenants WHERE id = %s", (str(tenant_id),))
+            return cur.rowcount > 0
+
+    def find_tenants_by_name_regex(self, pattern: str) -> list[dict]:
+        # Postgres POSIX regex with `~` operator. We don't pre-validate the
+        # pattern in Python — let PG raise; the API returns the error.
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id::text, name, slug FROM tenants WHERE name ~ %s "
+                "ORDER BY created_at",
+                (pattern,),
+            )
+            return [{"id": r[0], "name": r[1], "slug": r[2]} for r in cur.fetchall()]
+
+    def delete_tenants_by_name_regex(self, pattern: str) -> list[dict]:
+        targets = self.find_tenants_by_name_regex(pattern)
+        if not targets:
+            return []
+        ids = [t["id"] for t in targets]
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM tenants WHERE id::text = ANY(%s)", (ids,))
+        return targets
+
+    def insert_audit(self, **kw) -> UUID:
+        import json
+        details = kw.get("details") or {}
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO admin_audit_log "
+                "  (actor, action, target_kind, target_id, details, request_ip) "
+                "VALUES (%s, %s, %s, %s, %s::jsonb, %s) "
+                "RETURNING id",
+                (
+                    kw.get("actor", ""),
+                    kw.get("action", ""),
+                    kw.get("target_kind"),
+                    kw.get("target_id"),
+                    json.dumps(details),
+                    kw.get("request_ip"),
+                ),
+            )
+            row = cur.fetchone()
+        return row[0] if row else UUID(int=0)
+
+    def list_audit(self, *, limit: int = 100, offset: int = 0) -> list[dict]:
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id::text, occurred_at, actor, action, target_kind, "
+                "       target_id, details, request_ip "
+                "FROM admin_audit_log "
+                "ORDER BY occurred_at DESC LIMIT %s OFFSET %s",
+                (limit, offset),
+            )
+            rows = cur.fetchall()
+        out = []
+        for r in rows:
+            out.append({
+                "id": r[0],
+                "occurred_at": r[1].isoformat() if r[1] else None,
+                "actor": r[2],
+                "action": r[3],
+                "target_kind": r[4],
+                "target_id": r[5],
+                "details": r[6] or {},
+                "request_ip": r[7],
+            })
+        return out
+
     def count_runs_for_tenant_since(
         self, tenant_id: TenantId, since: datetime
     ) -> int:
