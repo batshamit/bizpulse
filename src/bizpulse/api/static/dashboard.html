@@ -40,9 +40,19 @@
       <div class="bzp-stat-label">Runs (recent)</div>
       <div class="bzp-stat-value" x-text="runs.length"></div>
     </div>
-    <div class="bzp-stat">
-      <div class="bzp-stat-label">Tenant</div>
-      <div class="bzp-stat-value" style="font-size:1.1rem;" x-text="tenant?.slug || '—'"></div>
+    <div class="bzp-stat" x-show="usage">
+      <div class="bzp-stat-label">Daily quota</div>
+      <div class="bzp-stat-value" style="font-size:1.4rem;">
+        <span x-text="usage?.runs_today || 0"></span>
+        <span style="color:var(--bzp-ink-faint); font-size:0.95rem;"> / </span>
+        <span x-text="usage?.daily_limit || '—'" style="color:var(--bzp-ink-faint); font-size:0.95rem;"></span>
+      </div>
+      <div class="bzp-llll-bar" style="margin-top:0.5rem;">
+        <span :style="`width: ${quotaPercent()}%; background: var(--bzp-${quotaTone()});`"></span>
+      </div>
+      <div style="font-size:0.78rem; color:var(--bzp-ink-faint); margin-top:0.4rem;">
+        <span x-text="usage?.remaining_today"></span> remaining (rolling 24h)
+      </div>
     </div>
     <div class="bzp-stat" style="background:var(--bzp-accent); color:#fff; border-color:var(--bzp-accent);">
       <div class="bzp-stat-label" style="color:#f5e6df;">Quick action</div>

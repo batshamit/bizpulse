@@ -149,13 +149,18 @@ document.addEventListener('alpine:init', () => {
     tenant: null,
     businesses: [],
     runs: [],
+    usage: null,
     busy: true,
     async init() {
       if (!bzpRequireLogin()) return;
       this.tenant = bzpTenant();
       try {
-        this.businesses = await bzpFetch('/v1/businesses');
-        // Pull recent runs across all businesses.
+        const [businesses, usage] = await Promise.all([
+          bzpFetch('/v1/businesses'),
+          bzpFetch('/v1/tenants/me/usage').catch(() => null),
+        ]);
+        this.businesses = businesses;
+        this.usage = usage;
         const runLists = await Promise.all(
           this.businesses.map(b => bzpFetch(`/v1/businesses/${b.id}/runs`))
         );
@@ -168,6 +173,16 @@ document.addEventListener('alpine:init', () => {
     bizName(id) {
       const b = this.businesses.find(b => b.id === id);
       return b ? b.url : id.slice(0, 8) + '…';
+    },
+    quotaPercent() {
+      if (!this.usage || !this.usage.daily_limit) return 0;
+      return Math.min(100, Math.round((this.usage.runs_today / this.usage.daily_limit) * 100));
+    },
+    quotaTone() {
+      const pct = this.quotaPercent();
+      if (pct >= 100) return 'danger';
+      if (pct >= 80)  return 'warning';
+      return 'success';
     },
   }));
 

@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import re
 import tempfile
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -163,6 +164,52 @@ def _pick_council() -> Council | None:
     )
 
 
+# Pattern matches transient vendor / network failures the user typically
+# wants us to retry through, not crash on. Anything matching this regex
+# (case-insensitive) gets up to 2 retries with exponential backoff.
+_TRANSIENT_RE = re.compile(
+    r"(429|502|503|504|"
+    r"rate.?limit|TPM|RPM|"
+    r"timeout|"
+    r"service.?(tier|capacity|unavailable)|"
+    r"overloaded|"
+    r"upstream)",
+    re.IGNORECASE,
+)
+_RETRY_BACKOFFS_SEC = (8.0, 24.0)  # two retries → ~32s extra worst case
+
+
+async def _invoke_graph_with_retry(graph, initial_state):
+    """Run the LangGraph; retry on transient errors with exponential backoff.
+
+    Non-transient errors propagate on the first occurrence — we don't want
+    to retry a schema-validation bug 3 times. Match against _TRANSIENT_RE
+    on the str(exception) — covers vendor 429/413/5xx + asyncio TimeoutError
+    text + Groq/OpenRouter/Mistral specific phrasing without depending on
+    each SDK's exception hierarchy.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(1 + len(_RETRY_BACKOFFS_SEC)):
+        try:
+            return await graph.ainvoke(initial_state)
+        except Exception as exc:  # noqa: BLE001 — graph wraps many vendors
+            last_exc = exc
+            msg = str(exc)
+            transient = bool(_TRANSIENT_RE.search(msg))
+            if not transient or attempt >= len(_RETRY_BACKOFFS_SEC):
+                break
+            wait_s = _RETRY_BACKOFFS_SEC[attempt]
+            log.warning(
+                "runner.graph.transient_retrying",
+                attempt=attempt + 1,
+                wait_s=wait_s,
+                error=msg[:200],
+            )
+            await asyncio.sleep(wait_s)
+    assert last_exc is not None
+    raise last_exc
+
+
 async def _try_crawl(url: str, tenant_id: UUID, business_id: UUID) -> list[RawArtifact]:
     """Best-effort Playwright crawl with a 30s wall budget. Returns empty
     list on failure — caller should fall back to a synthetic seed."""
@@ -255,7 +302,7 @@ async def run_analysis_background(
         _set("failed", error=f"ingest failed: {exc}")
         return
 
-    # 3. Run the LangGraph.
+    # 3. Run the LangGraph (with retry on transient failures).
     _set("analyzing")
     runner = AgentRunner(
         retrieval=RetrievalEngine(repo, embedder=embedder),  # type: ignore[arg-type]
@@ -266,15 +313,16 @@ async def run_analysis_background(
     # LLM call across the whole run.
     graph = build_analysis_graph(runner, sequential=True)
 
+    initial_state = {
+        "tenant_id": business.tenant_id,
+        "business_id": business.id,
+        "industry": business.industry or "fintech",
+        "business_url": business.url,
+        "country": country,
+        "state": state,
+    }
     try:
-        final = await graph.ainvoke({
-            "tenant_id": business.tenant_id,
-            "business_id": business.id,
-            "industry": business.industry or "fintech",
-            "business_url": business.url,
-            "country": country,
-            "state": state,
-        })
+        final = await _invoke_graph_with_retry(graph, initial_state)
     except Exception as exc:  # noqa: BLE001
         log.warning("runner.graph.failed", error=str(exc)[:300])
         _set("failed", error=f"graph invocation failed: {exc}")

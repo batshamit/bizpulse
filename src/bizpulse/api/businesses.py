@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from bizpulse.api.dependencies import get_store, require_tenant
 from bizpulse.api.runner_service import run_analysis_background
+from bizpulse.api.usage import enforce_daily_limit
 from bizpulse.models import Business, RunRecord, Tenant
 from bizpulse.models.common import SUPPORTED_INDUSTRIES
 from bizpulse.storage import Store
@@ -83,7 +84,7 @@ def analyze(
     business_id: UUID,
     bg: BackgroundTasks,
     body: AnalyzeRequest | None = None,
-    tenant: Tenant = Depends(require_tenant),
+    tenant: Tenant = Depends(enforce_daily_limit),
     store: Store = Depends(get_store),
 ) -> RunRecord:
     biz = store.get_business(business_id)

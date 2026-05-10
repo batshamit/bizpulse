@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 import secrets
+from datetime import datetime
 from typing import Iterable
 from uuid import UUID, uuid4
 
@@ -197,6 +198,26 @@ class PostgresStore:
             if row is None:
                 raise KeyError(f"unknown run: {run_id}")
         return _row_to_run(row)
+
+    def count_runs_for_tenant_since(
+        self, tenant_id: TenantId, since: datetime
+    ) -> int:
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM runs WHERE tenant_id = %s AND started_at >= %s",
+                (str(tenant_id), since),
+            )
+            row = cur.fetchone()
+        return int(row[0]) if row else 0
+
+    def count_runs_for_tenant(self, tenant_id: TenantId) -> int:
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM runs WHERE tenant_id = %s",
+                (str(tenant_id),),
+            )
+            row = cur.fetchone()
+        return int(row[0]) if row else 0
 
     def list_runs_for_business(self, business_id: BusinessId) -> list[RunRecord]:
         with self._pool.connection() as conn, conn.cursor() as cur:

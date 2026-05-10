@@ -21,6 +21,7 @@ from bizpulse import __version__
 from bizpulse.api.businesses import router as businesses_router
 from bizpulse.api.runs import router as runs_router
 from bizpulse.api.tenants import router as tenants_router
+from bizpulse.api.usage import router as usage_router
 from bizpulse.config import settings
 from bizpulse.logging import configure, get_logger
 
@@ -47,6 +48,7 @@ app = FastAPI(
 app.include_router(tenants_router)
 app.include_router(businesses_router)
 app.include_router(runs_router)
+app.include_router(usage_router)
 
 # Static GUI mounted at /ui (html=True serves index.html on /ui/).
 if STATIC_DIR.is_dir():

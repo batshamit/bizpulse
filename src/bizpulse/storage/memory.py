@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import secrets
 import threading
+from datetime import datetime
 from uuid import UUID, uuid4
 
 from bizpulse.models import (
@@ -139,6 +140,20 @@ class InMemoryStore:
     def list_runs_for_business(self, business_id: BusinessId) -> list[RunRecord]:
         ids = self._runs_by_business.get(business_id, [])
         return [self._runs[r] for r in ids if r in self._runs]
+
+    def count_runs_for_tenant_since(
+        self, tenant_id: TenantId, since: datetime
+    ) -> int:
+        """Number of runs created by this tenant after `since`. Used for
+        rate-limiting POST /analyze."""
+        n = 0
+        for run in self._runs.values():
+            if run.tenant_id == tenant_id and run.started_at >= since:
+                n += 1
+        return n
+
+    def count_runs_for_tenant(self, tenant_id: TenantId) -> int:
+        return sum(1 for r in self._runs.values() if r.tenant_id == tenant_id)
 
     # ----- diagnostics ---------------------------------------------------
 
