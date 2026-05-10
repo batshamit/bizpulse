@@ -154,18 +154,21 @@ class TEIReranker(TEIEmbedder):
 # --- Gemini embedder ------------------------------------------------------
 
 class GeminiEmbedder:
-    """Async embedder using Google AI Studio's text-embedding-004 (768-dim).
+    """Async embedder using Google AI Studio's gemini-embedding-001 (768-dim).
 
     Free-tier-friendly. Used when TEI isn't running locally — common for
     portfolio demos where a GPU isn't available.
-    """
+
+    Note: as of mid-2026 the working model name is `gemini-embedding-001`.
+    The older `text-embedding-004` returns 404 on v1beta. Override via
+    `model_name=` if Google ships a new identifier."""
 
     embed_dim = 768
-    model = "gemini-text-embedding-004"
+    model = "gemini-embedding-001"
 
     def __init__(
         self,
-        model_name: str = "text-embedding-004",
+        model_name: str = "gemini-embedding-001",
         api_key: str | None = None,
         timeout: float = 30.0,
         max_retries: int = 3,

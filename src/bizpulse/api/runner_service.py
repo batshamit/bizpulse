@@ -49,7 +49,7 @@ _QDRANT_BASE = Path(
 
 
 class _HashEmbedder:
-    """Fallback when no embedding key is available."""
+    """Fallback when no embedding key is available or Gemini is unreachable."""
 
     embed_dim = 768
     model = "hash-fallback"
@@ -67,14 +67,46 @@ class _HashEmbedder:
         return out
 
 
+class _SafeEmbedder:
+    """Wraps a primary embedder; on any runtime failure, falls back to a
+    secondary embedder for the rest of the run. Lets the demo keep moving
+    when Google's embeddings API has a bad day or returns 404 on a model
+    name that quietly changed."""
+
+    def __init__(self, primary, fallback):
+        self.primary = primary
+        self.fallback = fallback
+        self.embed_dim = getattr(primary, "embed_dim", getattr(fallback, "embed_dim", 768))
+        self.model = getattr(primary, "model", "")
+        self._fallen_back = False
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        if self._fallen_back:
+            return await self.fallback.embed(texts)
+        try:
+            return await self.primary.embed(texts)
+        except Exception as exc:  # noqa: BLE001 — vendor SDKs raise heterogeneously
+            log.warning(
+                "runner.embedder.primary_failed_falling_back",
+                primary=self.model,
+                error=str(exc)[:200],
+            )
+            self._fallen_back = True
+            self.embed_dim = getattr(self.fallback, "embed_dim", 768)
+            self.model = getattr(self.fallback, "model", "fallback")
+            return await self.fallback.embed(texts)
+
+
 def _pick_embedder():
-    """Prefer Gemini if a Google key is set; otherwise hash fallback."""
+    """Wraps a Gemini embedder with a hash-embedder fallback so a Gemini
+    outage / model rename doesn't take the whole run down."""
+    fallback = _HashEmbedder()
     if os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"):
         try:
-            return GeminiEmbedder()
+            return _SafeEmbedder(primary=GeminiEmbedder(), fallback=fallback)
         except Exception as exc:  # noqa: BLE001
             log.warning("runner.embedder.gemini_init_failed", error=str(exc)[:200])
-    return _HashEmbedder()
+    return fallback
 
 
 def _pick_council() -> Council | None:
@@ -119,14 +151,18 @@ async def _try_crawl(url: str, tenant_id: UUID, business_id: UUID) -> list[RawAr
     artifacts: list[RawArtifact] = []
     try:
         agen: AsyncIterator[RawArtifact] = crawler.crawl(
-            url, tenant_id=tenant_id, business_id=business_id, max_pages=8
+            url, tenant_id=tenant_id, business_id=business_id, max_pages=6
         )
 
         async def _collect():
             async for a in agen:
                 artifacts.append(a)
+                # Bail out early once we have enough — first 4 pages are
+                # usually the most informative (home + about + pricing + blog).
+                if len(artifacts) >= 4:
+                    break
 
-        await asyncio.wait_for(_collect(), timeout=30.0)
+        await asyncio.wait_for(_collect(), timeout=45.0)
     except asyncio.TimeoutError:
         log.warning("runner.crawl.timeout", url=url, partial=len(artifacts))
     except Exception as exc:  # noqa: BLE001 — Playwright raises many types
