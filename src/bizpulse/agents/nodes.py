@@ -150,19 +150,32 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
             r = await runner.run(
                 agent="strategist",
                 task=(
-                    "Synthesize the prior agent outputs into a complete MarketingStrategy. "
-                    "Every Recommendation MUST cite chunk_ids — lift them from the prior "
-                    "agent outputs (the citation IDs are listed in each prior summary) and "
-                    "from the retrieved context below. Aim for 3-7 prioritized "
-                    "recommendations across the most relevant channels for this industry.\n\n"
+                    "Produce a SLIM MarketingStrategy that focuses on:\n"
+                    "  - tenant_id, business_id, industry (echo from input)\n"
+                    "  - recommendations (3-7 prioritized items, each with chunk_id citations)\n"
+                    "  - overall_confidence (0..1)\n"
+                    "  - summary (3-5 sentence executive overview)\n\n"
+                    "Set `brand`, `audience`, `competitive_landscape`, `content_audit` "
+                    "to null — they will be merged from prior agent outputs after you "
+                    "return. Lift citation chunk_ids from the prior agent summaries "
+                    "below and from the retrieved context.\n\n"
                     f"Prior agent outputs (summarized):\n{prior}"
                 ),
                 output_schema=MarketingStrategy,
                 query_text="marketing strategy recommendations channels priorities",
                 top_k=3,
             )
+            # Merge the prior analyst outputs back into the strategy so the
+            # final report carries the full structure even though the LLM
+            # only emitted the synthesis-specific fields.
+            merged = r.output.model_copy(update={
+                "brand": state.get("brand") or r.output.brand,
+                "audience": state.get("audience") or r.output.audience,
+                "competitive_landscape": state.get("competitive_landscape") or r.output.competitive_landscape,
+                "content_audit": state.get("content_audit") or r.output.content_audit,
+            })
             return _record_repair(
-                {"final_strategy": r.output},
+                {"final_strategy": merged},
                 "strategist",
                 r.repair_attempted,
             )

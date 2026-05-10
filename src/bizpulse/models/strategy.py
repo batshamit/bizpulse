@@ -137,15 +137,23 @@ class Recommendation(StrictModel):
 
 class MarketingStrategy(StrictModel):
     """The end-to-end output of one BizPulse run — what gets returned to the
-    caller, persisted in Postgres, and exposed via the MCP server."""
+    caller, persisted in Postgres, and exposed via the MCP server.
+
+    The four analytical fields (`brand`, `audience`, `competitive_landscape`,
+    `content_audit`) are Optional because the strategist agent itself only
+    needs to emit the synthesis-specific fields (recommendations, summary,
+    overall_confidence). The orchestrator merges in the prior analyst
+    outputs from state after the strategist returns. The full populated
+    MarketingStrategy is what gets persisted and shown in the GUI; an
+    incomplete one is fine for a partial / failed pipeline."""
 
     tenant_id: TenantId
     business_id: BusinessId
     industry: str
-    brand: BrandAnalysis
-    audience: AudienceAnalysis
-    competitive_landscape: CompetitiveLandscape
-    content_audit: ContentAudit
+    brand: BrandAnalysis | None = None
+    audience: AudienceAnalysis | None = None
+    competitive_landscape: CompetitiveLandscape | None = None
+    content_audit: ContentAudit | None = None
     recommendations: list[Recommendation] = Field(min_length=1)
     overall_confidence: float = Field(ge=0.0, le=1.0)
     summary: str = Field(min_length=1, description="3-5 sentence executive summary.")
