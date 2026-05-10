@@ -139,26 +139,27 @@ def make_compliance_node(council) -> NodeFn:
 def make_strategist_node(runner: AgentRunner) -> NodeFn:
     """Synthesizes prior agent outputs into the final MarketingStrategy.
 
-    The strategist sees the prior outputs via the user prompt task description
-    so it can incorporate them. The retrieved chunks remain available as
-    citation evidence.
-    """
+    The strategist sees a *compact* summary of prior outputs (not the full
+    verbatim JSON dump — that ballooned the request past per-vendor token
+    ceilings, e.g. Groq's 12K per-request cap). top_k=3 chunks for cite
+    grounding; the bulk of substance comes via the prior summaries."""
 
     async def strategist(state: AnalysisState) -> dict[str, object]:
-        prior = _summarize_prior(state)
+        prior = _summarize_prior_compact(state)
         try:
             r = await runner.run(
                 agent="strategist",
                 task=(
                     "Synthesize the prior agent outputs into a complete MarketingStrategy. "
-                    "Every Recommendation MUST cite chunk_ids. Lift citations from the prior "
-                    "agent outputs where appropriate. Aim for 3-7 prioritized recommendations "
-                    "across the most relevant channels for this industry.\n\n"
-                    f"Prior outputs (verbatim):\n{prior}"
+                    "Every Recommendation MUST cite chunk_ids — lift them from the prior "
+                    "agent outputs (the citation IDs are listed in each prior summary) and "
+                    "from the retrieved context below. Aim for 3-7 prioritized "
+                    "recommendations across the most relevant channels for this industry.\n\n"
+                    f"Prior agent outputs (summarized):\n{prior}"
                 ),
                 output_schema=MarketingStrategy,
                 query_text="marketing strategy recommendations channels priorities",
-                top_k=12,
+                top_k=3,
             )
             return _record_repair(
                 {"final_strategy": r.output},
@@ -173,18 +174,61 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
 
 # ---- helpers -------------------------------------------------------------
 
-def _summarize_prior(state: AnalysisState) -> str:
-    """Build a compact text block summarizing whatever prior agent outputs
-    are present, so the strategist can synthesize without re-running them."""
-    parts = []
+def _summarize_prior_compact(state: AnalysisState) -> str:
+    """Tight text summary of prior agent outputs — designed to fit even a
+    Groq 12K-token-per-request ceiling.
+
+    Strategy:
+      - keep narrative fields (positioning, tone, value props, primary persona)
+      - keep recommendation channels + actions (the reasoning seeds)
+      - drop full Citation dumps; surface chunk_ids inline as a short list
+    """
+    parts: list[str] = []
+
     if (b := state.get("brand")) is not None:
-        parts.append(f"Brand: {b.model_dump_json()}")
+        ids = ",".join(str(c.chunk_id)[:8] for c in b.citations[:5])
+        parts.append(
+            "BRAND:\n"
+            f"  positioning: {b.positioning[:240]}\n"
+            f"  tone: {b.tone[:120]}\n"
+            f"  value_props: {b.value_props[:5]}\n"
+            f"  citation chunk ids: [{ids}]"
+        )
+
     if (a := state.get("audience")) is not None:
-        parts.append(f"Audience: {a.model_dump_json()}")
+        ids = ",".join(str(c.chunk_id)[:8] for c in a.citations[:5])
+        parts.append(
+            "AUDIENCE:\n"
+            f"  primary: {a.primary.name} — {a.primary.description[:200]}\n"
+            f"  motivations: {a.primary.motivations[:5]}\n"
+            f"  pain points: {a.primary.pain_points[:5]}\n"
+            f"  citation chunk ids: [{ids}]"
+        )
+
     if (c := state.get("competitive_landscape")) is not None:
-        parts.append(f"Competitive Landscape: {c.model_dump_json()}")
+        names = ", ".join(
+            f"{cm.name} ({cm.url})"
+            for cm in c.competitors[:5]
+        )
+        ids = ",".join(str(ci.chunk_id)[:8] for ci in c.citations[:5])
+        parts.append(
+            "COMPETITORS:\n"
+            f"  {names}\n"
+            f"  market position: {c.market_position[:240]}\n"
+            f"  citation chunk ids: [{ids}]"
+        )
+
     if (cau := state.get("content_audit")) is not None:
-        parts.append(f"Content Audit: {cau.model_dump_json()}")
+        strong = ", ".join(cau.pillars_strong[:5]) if cau.pillars_strong else "(none)"
+        weak = ", ".join(cau.pillars_weak[:5]) if cau.pillars_weak else "(none)"
+        finds = "; ".join(f.observation[:120] for f in cau.findings[:4])
+        parts.append(
+            "CONTENT AUDIT:\n"
+            f"  strong pillars: {strong}\n"
+            f"  weak pillars: {weak}\n"
+            f"  top findings: {finds}"
+        )
+
     if not parts:
         return "(no prior agent outputs available — answer from retrieval alone)"
     return "\n\n".join(parts)
