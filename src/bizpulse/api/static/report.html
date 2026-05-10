@@ -81,9 +81,31 @@
       <div x-show="activeTab === 'strategy'">
         <template x-if="!run.final_output">
           <div class="bzp-card bzp-empty">
-            <div style="font-size:1.05rem; margin-bottom:0.5rem;">Strategy not yet available</div>
-            <div>This run is in <strong x-text="run.status"></strong>. The Council of LLMs is still processing — refresh in a moment.</div>
-            <button @click="init()" class="bzp-btn bzp-btn-ghost" style="margin-top:1rem;">Refresh</button>
+            <template x-if="run.status === 'failed'">
+              <div>
+                <div style="font-size:1.1rem; color:var(--bzp-danger); margin-bottom:0.6rem;">
+                  Analysis failed
+                </div>
+                <div x-show="run.error" x-text="run.error" style="font-size:0.85rem; color:var(--bzp-ink-soft); background:var(--bzp-danger-soft); padding:0.8rem; border-radius:var(--bzp-radius); margin-bottom:1rem; text-align:left; font-family:monospace; word-break:break-word;"></div>
+                <div style="display:flex; gap:0.6rem; justify-content:center;">
+                  <button @click="retry()" :disabled="retrying" class="bzp-btn bzp-btn-primary">
+                    <span x-show="!retrying">↻ Retry analysis</span>
+                    <span x-show="retrying">Retrying…</span>
+                  </button>
+                  <a href="/ui/new-report.html" class="bzp-btn bzp-btn-ghost">New report</a>
+                </div>
+                <div style="font-size:0.8rem; color:var(--bzp-ink-faint); margin-top:0.7rem;">
+                  Retry uses the same business URL. Use "New report" to change the URL or jurisdiction.
+                </div>
+              </div>
+            </template>
+            <template x-if="run.status !== 'failed'">
+              <div>
+                <div style="font-size:1.05rem; margin-bottom:0.5rem;">Strategy not yet available</div>
+                <div>This run is in <strong x-text="run.status"></strong>. The Council of LLMs is still processing — refresh in a moment.</div>
+                <button @click="init()" class="bzp-btn bzp-btn-ghost" style="margin-top:1rem;">Refresh</button>
+              </div>
+            </template>
           </div>
         </template>
 

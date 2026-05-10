@@ -76,6 +76,8 @@ document.addEventListener('alpine:init', () => {
     mode: 'login',           // 'login' or 'create'
     apiKey: '',
     name: '',
+    signupCode: '',
+    signupRequiresCode: false,
     busy: false,
     error: '',
 
@@ -86,8 +88,14 @@ document.addEventListener('alpine:init', () => {
           const me = await bzpFetch('/v1/tenants/me');
           bzpSetTenant(me);
           window.location.href = '/ui/dashboard.html';
+          return;
         } catch (e) { bzpClearApiKey(); }
       }
+      // Find out whether the operator has gated signup.
+      try {
+        const policy = await fetch('/v1/tenants/signup-policy').then(r => r.json());
+        this.signupRequiresCode = !!policy.requires_code;
+      } catch (e) { /* default false */ }
     },
 
     async submitLogin() {
@@ -108,12 +116,20 @@ document.addEventListener('alpine:init', () => {
       this.error = '';
       this.busy = true;
       try {
-        const tenant = await fetch('/v1/tenants', {
+        const headers = { 'Content-Type': 'application/json' };
+        if (this.signupRequiresCode) {
+          headers['X-Signup-Code'] = this.signupCode.trim();
+        }
+        const r = await fetch('/v1/tenants', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({ name: this.name.trim() }),
-        }).then(r => r.json());
-        if (!tenant.api_key) throw new Error('Tenant create failed: ' + JSON.stringify(tenant));
+        });
+        const tenant = await r.json();
+        if (!r.ok || !tenant.api_key) {
+          const detail = tenant.detail || JSON.stringify(tenant);
+          throw new Error(detail);
+        }
         bzpSetApiKey(tenant.api_key);
         bzpSetTenant(tenant);
         window.location.href = '/ui/dashboard.html';
@@ -222,6 +238,7 @@ document.addEventListener('alpine:init', () => {
   Alpine.data('reportPage', () => ({
     runId: '', run: null, business: null, busy: true, error: '',
     activeTab: 'strategy',
+    retrying: false,
     async init() {
       if (!bzpRequireLogin()) return;
       const params = new URLSearchParams(window.location.search);
@@ -234,6 +251,23 @@ document.addEventListener('alpine:init', () => {
         }
       } catch (e) { this.error = e.message; }
       finally { this.busy = false; }
+    },
+    async retry() {
+      if (!this.run || !this.run.business_id) return;
+      this.retrying = true;
+      try {
+        const newRun = await bzpFetch(`/v1/businesses/${this.run.business_id}/analyze`, {
+          method: 'POST',
+          body: JSON.stringify({ country: 'IN', state: null }),
+        });
+        bzpToast('Retry started — opening new run');
+        setTimeout(() => {
+          window.location.href = `/ui/report.html?run=${newRun.id}`;
+        }, 600);
+      } catch (e) {
+        bzpToast('Retry failed: ' + e.message);
+        this.retrying = false;
+      }
     },
     statusPill: bzpStatusPill,
     fmtTime: bzpFmtTime,

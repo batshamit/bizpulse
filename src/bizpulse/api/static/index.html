@@ -49,6 +49,16 @@
         <label class="bzp-label" for="tenantName">Tenant name</label>
         <input id="tenantName" x-model="name" type="text" placeholder="Acme Demo" class="bzp-input" required autofocus>
 
+        <template x-if="signupRequiresCode">
+          <div style="margin-top:1rem;">
+            <label class="bzp-label" for="signupCode">
+              Signup code
+              <span style="color:var(--bzp-ink-faint); font-weight:400; margin-left:0.4rem;">(required — ask the operator)</span>
+            </label>
+            <input id="signupCode" x-model="signupCode" type="password" placeholder="enter code" class="bzp-input" required>
+          </div>
+        </template>
+
         <button type="submit" :disabled="busy" class="bzp-btn bzp-btn-primary" style="width:100%; margin-top:1.25rem; justify-content:center;">
           <span x-show="!busy">Create tenant →</span>
           <span x-show="busy">Creating…</span>
