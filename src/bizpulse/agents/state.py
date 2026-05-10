@@ -17,6 +17,7 @@ from bizpulse.models import (
     ContentAudit,
     MarketingStrategy,
 )
+from bizpulse.models.compliance import ComplianceReport
 
 
 def _append(left: list, right: list) -> list:
@@ -32,6 +33,10 @@ class AnalysisState(TypedDict, total=False):
     business_id: UUID
     industry: str
     business_url: str
+    country: str
+    """ISO 3166-1 alpha-2; default 'IN' if absent."""
+    state: str | None
+    """State/province slug for state-specific regulators (e.g., 'maharashtra')."""
 
     # ---- per-agent outputs (each node fills its slot) ----
     brand: BrandAnalysis | None
@@ -41,6 +46,9 @@ class AnalysisState(TypedDict, total=False):
 
     # ---- final synthesis ----
     final_strategy: MarketingStrategy | None
+
+    # ---- compliance audit (added by compliance_checker after strategist) ----
+    compliance_report: ComplianceReport | None
 
     # ---- audit trail / failures ----
     errors: Annotated[list[str], _append]

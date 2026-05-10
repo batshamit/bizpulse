@@ -21,6 +21,7 @@ AgentName = Literal[
     "content_auditor",
     "strategist",
     "critic",
+    "compliance_checker",
     "audience_simulator",  # Phase-2 MiroFish, optional
 ]
 

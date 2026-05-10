@@ -54,6 +54,7 @@ _AGENT_ROLES: dict[AgentName, str] = {
     "content_auditor": "You audit a business's marketing content. Identify which content pillars are strong, which are weak, and surface specific findings backed by evidence.",
     "strategist": "You synthesize prior agent outputs into a final marketing strategy with prioritized, channel-specific recommendations. Each recommendation MUST cite the chunk_ids that support it.",
     "critic": "You re-read the Strategist's output and verify every analytical claim is supported by a real chunk in the context. Flag ungrounded claims, fabricated competitors, or schema violations. Return either a clean output or a list of issues for retry.",
+    "compliance_checker": "You score a MarketingStrategy against jurisdiction-specific regulations (RBI, SEBI, IRDAI, RERA, DPDP, ASCI, GDPR, etc.). For each Recommendation, raise a ComplianceFlag when it triggers a policy's prohibition or misses a required disclosure. Compute the 4 L's metric: Latest (recent regulations honored), Least (least penalty exposure), Lost (lost-revenue avoided), Lowest (lowest cost of compliance).",
     "audience_simulator": "You simulate an audience's reaction to a proposed marketing campaign. Spawn N personas matching the ICP and report aggregate sentiment, common objections, and red flags.",
 }
 

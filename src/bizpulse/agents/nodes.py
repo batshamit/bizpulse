@@ -103,6 +103,39 @@ def make_content_node(runner: AgentRunner) -> NodeFn:
     return content
 
 
+def make_compliance_node(council) -> NodeFn:
+    """Run the compliance_checker against the synthesized strategy.
+
+    Different signature from other nodes: takes a Council directly (not an
+    AgentRunner) because the prompt is custom-built from the policy registry
+    rather than retrieval chunks. See `bizpulse.compliance.checker`.
+    """
+    from bizpulse.compliance.checker import run_compliance_check
+
+    async def compliance(state: AnalysisState) -> dict[str, object]:
+        strategy = state.get("final_strategy")
+        if strategy is None:
+            log.info("graph.compliance.skipped_no_strategy")
+            return {"compliance_report": None}
+        country = state.get("country", "IN")
+        st = state.get("state")
+        try:
+            report = await run_compliance_check(
+                council=council,
+                strategy=strategy,
+                country=country,
+                state=st,
+            )
+            return {"compliance_report": report}
+        except Exception as exc:  # noqa: BLE001
+            log.warning("graph.compliance.failed", error=str(exc)[:300])
+            return {
+                "compliance_report": None,
+                "errors": [f"compliance_checker: {exc}"],
+            }
+    return compliance
+
+
 def make_strategist_node(runner: AgentRunner) -> NodeFn:
     """Synthesizes prior agent outputs into the final MarketingStrategy.
 

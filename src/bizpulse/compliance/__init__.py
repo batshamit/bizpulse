@@ -7,6 +7,7 @@ this registry to score MarketingStrategy outputs against applicable rules.
 
 from __future__ import annotations
 
+from bizpulse.compliance.checker import run_compliance_check
 from bizpulse.compliance.policies import (
     POLICIES,
     applicable,
@@ -19,6 +20,7 @@ __all__ = [
     "POLICIES",
     "applicable",
     "list_policies",
+    "run_compliance_check",
     "supported_countries",
     "supported_states",
 ]
