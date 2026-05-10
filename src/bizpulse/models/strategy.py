@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import Field, field_validator
 
-from bizpulse.models.citations import Citation
+from bizpulse.models.citations import Citation, _coerce_chunk_id
 from bizpulse.models.common import BusinessId, ChunkId, StrictModel, TenantId
 from bizpulse.models.compliance import ComplianceReport
 
@@ -110,6 +110,17 @@ class Recommendation(StrictModel):
         default_factory=list,
         description="RBI/SEBI/RERA/etc. flags that the Critic should re-check.",
     )
+
+    @field_validator("evidence_chunk_ids", mode="before")
+    @classmethod
+    def _lenient_evidence_ids(cls, v: object) -> list:
+        """Coerce each evidence chunk_id leniently — same logic as Citation.
+        Truncated / hallucinated IDs map to the UNKNOWN sentinel; the Critic
+        agent flags them. Empty list after coercion is still rejected by
+        min_length=1 below."""
+        if not isinstance(v, list):
+            return v
+        return [_coerce_chunk_id(item) for item in v]
 
     @field_validator("evidence_chunk_ids")
     @classmethod

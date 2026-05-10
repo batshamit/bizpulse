@@ -186,7 +186,7 @@ def _summarize_prior_compact(state: AnalysisState) -> str:
     parts: list[str] = []
 
     if (b := state.get("brand")) is not None:
-        ids = ",".join(str(c.chunk_id)[:8] for c in b.citations[:5])
+        ids = ",".join(str(c.chunk_id) for c in b.citations[:5])
         parts.append(
             "BRAND:\n"
             f"  positioning: {b.positioning[:240]}\n"
@@ -196,7 +196,7 @@ def _summarize_prior_compact(state: AnalysisState) -> str:
         )
 
     if (a := state.get("audience")) is not None:
-        ids = ",".join(str(c.chunk_id)[:8] for c in a.citations[:5])
+        ids = ",".join(str(c.chunk_id) for c in a.citations[:5])
         parts.append(
             "AUDIENCE:\n"
             f"  primary: {a.primary.name} — {a.primary.description[:200]}\n"
@@ -210,7 +210,7 @@ def _summarize_prior_compact(state: AnalysisState) -> str:
             f"{cm.name} ({cm.url})"
             for cm in c.competitors[:5]
         )
-        ids = ",".join(str(ci.chunk_id)[:8] for ci in c.citations[:5])
+        ids = ",".join(str(ci.chunk_id) for ci in c.citations[:5])
         parts.append(
             "COMPETITORS:\n"
             f"  {names}\n"
