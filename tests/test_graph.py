@@ -105,18 +105,20 @@ _STRATEGY_JSON = json.dumps({
 
 
 def _route(_system: str, user: str) -> str:
-    """Return the right canned JSON based on the schema name embedded in
-    the user prompt by PromptBuilder."""
-    if "BrandAnalysis" in user:
-        return _BRAND_JSON
-    if "AudienceAnalysis" in user:
-        return _AUDIENCE_JSON
-    if "CompetitiveLandscape" in user:
-        return _COMPETITOR_JSON
-    if "ContentAudit" in user:
-        return _CONTENT_JSON
-    if "MarketingStrategy" in user:
+    """Match the parenthesized schema name PromptBuilder writes once. Order
+    matters: the embedded JSON schema for MarketingStrategy contains nested
+    type names (BrandAnalysis, AudienceAnalysis, ...), so check the most
+    specific superset first."""
+    if "(MarketingStrategy)" in user:
         return _STRATEGY_JSON
+    if "(BrandAnalysis)" in user:
+        return _BRAND_JSON
+    if "(AudienceAnalysis)" in user:
+        return _AUDIENCE_JSON
+    if "(CompetitiveLandscape)" in user:
+        return _COMPETITOR_JSON
+    if "(ContentAudit)" in user:
+        return _CONTENT_JSON
     return "{}"
 
 
