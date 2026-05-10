@@ -219,3 +219,19 @@ def OpenRouterClient(
         api_key_env="OPENROUTER_API_KEY",
         **kw,
     )
+
+
+def MistralClient(model: str = "mistral-small-latest", **kw: Any) -> OpenAICompatClient:
+    """Mistral — European-built foundation models (mistral-large/medium/small,
+    ministral-8b/3b, codestral). OpenAI-compatible /v1/chat/completions.
+
+    Default 'mistral-small-latest' is the price/quality sweet spot for
+    Council membership; bump to 'mistral-large-latest' for the judge role
+    if you want stronger synthesis."""
+    return OpenAICompatClient(
+        vendor="mistral",
+        model=model,
+        base_url="https://api.mistral.ai/v1",
+        api_key_env="MISTRAL_API_KEY",
+        **kw,
+    )

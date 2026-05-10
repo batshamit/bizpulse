@@ -66,6 +66,7 @@ VENDOR_BUILDERS: dict[str, callable] = {
     "deepseek":   lambda: _try_openai_compat("DeepSeekClient", "DEEPSEEK_API_KEY"),
     "groq":       lambda: _try_openai_compat("GroqClient", "GROQ_API_KEY"),
     "openrouter": lambda: _try_openai_compat("OpenRouterClient", "OPENROUTER_API_KEY"),
+    "mistral":    lambda: _try_openai_compat("MistralClient", "MISTRAL_API_KEY"),
 }
 
 

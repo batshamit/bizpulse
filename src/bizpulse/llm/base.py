@@ -91,6 +91,12 @@ PRICING_PER_1K = {
     "groq:llama-3.1-8b-instant":    (0.00005, 0.00008),
     "groq:mixtral-8x7b-32768":      (0.00024, 0.00024),
     "groq:gemma2-9b-it":            (0.00020, 0.00020),
+    # Mistral — European foundation models, OpenAI-compatible API.
+    "mistral:mistral-large-latest":  (0.002, 0.006),
+    "mistral:mistral-medium-latest": (0.0004, 0.002),
+    "mistral:mistral-small-latest":  (0.0002, 0.0006),
+    "mistral:ministral-8b-latest":   (0.0001, 0.0001),
+    "mistral:ministral-3b-latest":   (0.00004, 0.00004),
 }
 
 
