@@ -161,6 +161,9 @@ def test_factory_available_vendors_reflects_env(monkeypatch: pytest.MonkeyPatch)
         "PERPLEXITY_API_KEY",
         "XAI_API_KEY",
         "DEEPSEEK_API_KEY",
+        "GROQ_API_KEY",
+        "MISTRAL_API_KEY",
+        "OPENROUTER_API_KEY",
     ):
         monkeypatch.delenv(var, raising=False)
     assert available_vendors() == []
@@ -180,6 +183,9 @@ def test_factory_build_council_raises_with_no_keys(monkeypatch: pytest.MonkeyPat
         "PERPLEXITY_API_KEY",
         "XAI_API_KEY",
         "DEEPSEEK_API_KEY",
+        "GROQ_API_KEY",
+        "MISTRAL_API_KEY",
+        "OPENROUTER_API_KEY",
     ):
         monkeypatch.delenv(var, raising=False)
     with pytest.raises(RuntimeError, match="No LLM API keys"):
