@@ -182,3 +182,19 @@ def DeepSeekClient(model: str = "deepseek-chat", **kw: Any) -> OpenAICompatClien
         api_key_env="DEEPSEEK_API_KEY",
         **kw,
     )
+
+
+def GroqClient(model: str = "llama-3.3-70b-versatile", **kw: Any) -> OpenAICompatClient:
+    """Groq — open-source models (Llama 3.3, Mixtral, Gemma 2) on LPU hardware.
+
+    NOT xAI's Grok (see GrokClient for that). Groq is the fast-inference
+    platform; latency is typically <2s for full responses, which makes it
+    a strong Council member for keeping debate rounds snappy.
+    """
+    return OpenAICompatClient(
+        vendor="groq",
+        model=model,
+        base_url="https://api.groq.com/openai/v1",
+        api_key_env="GROQ_API_KEY",
+        **kw,
+    )

@@ -86,6 +86,11 @@ PRICING_PER_1K = {
     "xai:grok-2":                   (0.002, 0.010),
     "deepseek:deepseek-chat":       (0.00027, 0.0011),
     "deepseek:deepseek-reasoner":   (0.00055, 0.00219),
+    # Groq — Llama 3.3 / Mixtral / Gemma on LPU hardware. Cheap & fast.
+    "groq:llama-3.3-70b-versatile": (0.00059, 0.00079),
+    "groq:llama-3.1-8b-instant":    (0.00005, 0.00008),
+    "groq:mixtral-8x7b-32768":      (0.00024, 0.00024),
+    "groq:gemma2-9b-it":            (0.00020, 0.00020),
 }
 
 
