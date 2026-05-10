@@ -219,7 +219,7 @@ class AgentRunner:
             "No prose, no fences, no extra fields."
         )
         cr = await self.council.judge.complete(
-            system=system, user=repair_user, max_tokens=4096, temperature=0.0
+            system=system, user=repair_user, max_tokens=self.council.max_tokens, temperature=0.0
         )
         data = extract_json(cr.text)
         return output_schema.model_validate(data)

@@ -88,17 +88,21 @@ class Council:
         rounds: int = 2,
         round_temperature: float = 0.2,
         synthesis_temperature: float = 0.0,
+        max_tokens: int = 2048,
     ) -> None:
         if not members:
             raise ValueError("Council needs at least one member")
         if rounds < 1:
             raise ValueError("rounds must be >= 1")
+        if max_tokens < 256:
+            raise ValueError("max_tokens must be >= 256")
         self.members = list(members)
         self.judge = judge
         self.fallback_judge = fallback_judge
         self.rounds = rounds
         self.round_temperature = round_temperature
         self.synthesis_temperature = synthesis_temperature
+        self.max_tokens = max_tokens
 
     async def debate(self, system: str, user: str) -> CouncilResult:
         t0 = time.perf_counter()
@@ -133,7 +137,7 @@ class Council:
             synth = await self.judge.complete(
                 system=self._synthesis_system(system),
                 user=synth_user,
-                max_tokens=4096,
+                max_tokens=self.max_tokens,
                 temperature=self.synthesis_temperature,
             )
             judge_used = self.judge.name
@@ -144,7 +148,7 @@ class Council:
             synth = await self.fallback_judge.complete(
                 system=self._synthesis_system(system),
                 user=synth_user,
-                max_tokens=4096,
+                max_tokens=self.max_tokens,
                 temperature=self.synthesis_temperature,
             )
             judge_used = self.fallback_judge.name
@@ -183,7 +187,7 @@ class Council:
                 cr: CompletionResult = await m.complete(
                     system=system,
                     user=this_user,
-                    max_tokens=4096,
+                    max_tokens=self.max_tokens,
                     temperature=self.round_temperature,
                 )
                 return ProposalRecord(
