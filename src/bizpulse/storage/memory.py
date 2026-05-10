@@ -70,6 +70,37 @@ class InMemoryStore:
     def list_tenants(self) -> list[Tenant]:
         return list(self._tenants.values())
 
+    def update_tenant(
+        self,
+        tenant_id: TenantId,
+        *,
+        name: str | None = None,
+        daily_limit_override: int | None = None,
+        clear_daily_limit_override: bool = False,
+        suspended: bool | None = None,
+        notes: str | None = None,
+    ) -> Tenant | None:
+        with self._lock:
+            t = self._tenants.get(tenant_id)
+            if t is None:
+                return None
+            updates: dict[str, object] = {}
+            if name is not None:
+                updates["name"] = name
+            if clear_daily_limit_override:
+                updates["daily_limit_override"] = None
+            elif daily_limit_override is not None:
+                updates["daily_limit_override"] = daily_limit_override
+            if suspended is not None:
+                updates["suspended"] = suspended
+            if notes is not None:
+                updates["notes"] = notes
+            if not updates:
+                return t
+            new_t = t.model_copy(update=updates)
+            self._tenants[tenant_id] = new_t
+            return new_t
+
     # ----- businesses ----------------------------------------------------
 
     def create_business(

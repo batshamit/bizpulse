@@ -26,6 +26,12 @@
   </div>
 </nav>
 
+<div x-data="topNav()" x-show="impersonating"
+     style="background:var(--bzp-warning-soft); color:var(--bzp-warning); padding:0.6rem 2rem; border-bottom:1px solid var(--bzp-warning); text-align:center; font-size:0.9rem;">
+  ⚠️ Impersonating <strong x-text="tenant?.name"></strong> via admin ·
+  <a href="#" @click.prevent="returnToAdmin()" style="margin-left:0.4rem;">Return to admin →</a>
+</div>
+
 <div class="bzp-container" x-data="dashboardPage()">
 
   <h1 class="bzp-page-title">Dashboard</h1>

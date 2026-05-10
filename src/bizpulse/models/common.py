@@ -61,6 +61,20 @@ class Tenant(StrictModel):
     slug: Annotated[str, Field(min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]*$")]
     api_key: str = Field(min_length=8, description="Per-tenant API key for authentication.")
     created_at: datetime = Field(default_factory=utcnow)
+    daily_limit_override: int | None = Field(
+        default=None,
+        ge=0,
+        description="Per-tenant override of the global daily analysis limit. None = inherit env default.",
+    )
+    suspended: bool = Field(
+        default=False,
+        description="When true, POST /analyze returns 403 regardless of quota.",
+    )
+    notes: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="Operator-only notes (visible only via admin endpoints).",
+    )
 
 
 SUPPORTED_INDUSTRIES: tuple[str, ...] = (

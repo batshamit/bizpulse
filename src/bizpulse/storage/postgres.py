@@ -74,18 +74,64 @@ class PostgresStore:
             cur.execute(
                 "INSERT INTO tenants (name, slug, api_key) "
                 "VALUES (%s, %s, %s) "
-                "RETURNING id, name, slug, api_key, created_at",
+                "RETURNING id, name, slug, api_key, created_at, "
+                "         daily_limit_override, suspended, notes",
                 (name, chosen_slug, api_key),
             )
             row = cur.fetchone()
             assert row is not None
-            tid, tname, tslug, takey, tcreated = row
-        return Tenant(id=tid, name=tname, slug=tslug, api_key=takey, created_at=tcreated)
+        result = _row_to_tenant(row)
+        assert result is not None
+        return result
+
+    def update_tenant(
+        self,
+        tenant_id: TenantId,
+        *,
+        name: str | None = None,
+        daily_limit_override: int | None = None,
+        clear_daily_limit_override: bool = False,
+        suspended: bool | None = None,
+        notes: str | None = None,
+    ) -> Tenant | None:
+        """Admin-only updater. Pass `clear_daily_limit_override=True` to
+        explicitly NULL the column (since None means 'don't change')."""
+        sets: list[str] = []
+        args: list[object] = []
+        if name is not None:
+            sets.append("name = %s"); args.append(name)
+        if clear_daily_limit_override:
+            sets.append("daily_limit_override = NULL")
+        elif daily_limit_override is not None:
+            sets.append("daily_limit_override = %s"); args.append(daily_limit_override)
+        if suspended is not None:
+            sets.append("suspended = %s"); args.append(suspended)
+            if suspended:
+                sets.append("suspended_at = now()")
+            else:
+                sets.append("suspended_at = NULL")
+        if notes is not None:
+            sets.append("notes = %s"); args.append(notes)
+
+        if not sets:
+            return self.get_tenant(tenant_id)
+
+        args.append(str(tenant_id))
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"UPDATE tenants SET {', '.join(sets)} WHERE id = %s "
+                "RETURNING id, name, slug, api_key, created_at, "
+                "         daily_limit_override, suspended, notes",
+                args,
+            )
+            row = cur.fetchone()
+        return _row_to_tenant(row)
 
     def get_tenant(self, tenant_id: TenantId) -> Tenant | None:
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT id, name, slug, api_key, created_at FROM tenants WHERE id = %s",
+                "SELECT id, name, slug, api_key, created_at, daily_limit_override, suspended, notes "
+                "FROM tenants WHERE id = %s",
                 (str(tenant_id),),
             )
             row = cur.fetchone()
@@ -94,7 +140,8 @@ class PostgresStore:
     def get_tenant_by_api_key(self, api_key: str) -> Tenant | None:
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT id, name, slug, api_key, created_at FROM tenants WHERE api_key = %s",
+                "SELECT id, name, slug, api_key, created_at, daily_limit_override, suspended, notes "
+                "FROM tenants WHERE api_key = %s",
                 (api_key,),
             )
             row = cur.fetchone()
@@ -103,7 +150,8 @@ class PostgresStore:
     def list_tenants(self) -> list[Tenant]:
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT id, name, slug, api_key, created_at FROM tenants ORDER BY created_at"
+                "SELECT id, name, slug, api_key, created_at, daily_limit_override, suspended, notes "
+                "FROM tenants ORDER BY created_at"
             )
             rows = cur.fetchall()
         return [t for t in (_row_to_tenant(r) for r in rows) if t is not None]
@@ -246,8 +294,27 @@ class PostgresStore:
 def _row_to_tenant(row: Iterable | None) -> Tenant | None:
     if row is None:
         return None
-    tid, name, slug, api_key, created_at = row
-    return Tenant(id=tid, name=name, slug=slug, api_key=api_key, created_at=created_at)
+    # Two row shapes for backward-compat: 5 cols (pre-migration) or 8 cols
+    # (with daily_limit_override, suspended, notes). Detect by length.
+    cols = list(row)
+    tid, name, slug, api_key, created_at = cols[:5]
+    daily_limit_override: int | None = None
+    suspended: bool = False
+    notes: str | None = None
+    if len(cols) >= 8:
+        daily_limit_override = cols[5]
+        suspended = bool(cols[6])
+        notes = cols[7]
+    return Tenant(
+        id=tid,
+        name=name,
+        slug=slug,
+        api_key=api_key,
+        created_at=created_at,
+        daily_limit_override=daily_limit_override,
+        suspended=suspended,
+        notes=notes,
+    )
 
 
 def _row_to_business(row: Iterable) -> Business:

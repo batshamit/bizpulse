@@ -47,7 +47,11 @@ class UsageReport(BaseModel):
 
 
 def _build_usage(*, tenant: Tenant, store: Store) -> UsageReport:
-    limit = daily_limit()
+    effective = (
+        tenant.daily_limit_override
+        if tenant.daily_limit_override is not None
+        else daily_limit()
+    )
     window_start = utcnow() - timedelta(hours=24)
     runs_today = store.count_runs_for_tenant_since(tenant.id, window_start)
     runs_total = store.count_runs_for_tenant(tenant.id)
@@ -55,8 +59,8 @@ def _build_usage(*, tenant: Tenant, store: Store) -> UsageReport:
         tenant_id=str(tenant.id),
         runs_today=runs_today,
         runs_total=runs_total,
-        daily_limit=limit,
-        remaining_today=max(0, limit - runs_today),
+        daily_limit=effective,
+        remaining_today=max(0, effective - runs_today),
         window_start=window_start.isoformat(),
     )
 
@@ -79,20 +83,33 @@ def enforce_daily_limit(
     tenant: Tenant = Depends(require_tenant),
     store: Store = Depends(get_store),
 ) -> Tenant:
-    """Block POST /analyze if the tenant has hit their daily quota.
+    """Block POST /analyze when:
+      - tenant is suspended (admin set suspended=true) -> 403
+      - tenant has hit their effective daily quota -> 429 + Retry-After
 
-    Returns the tenant on success (so the dependency-injected tenant is
-    re-used by the endpoint). Raises 429 + Retry-After header on overflow."""
-    limit = daily_limit()
-    if limit == 0:
+    The effective limit is `tenant.daily_limit_override` if set, else the
+    global env value. Setting limit=0 means 'unlimited' (gate disabled)."""
+    if tenant.suspended:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Tenant is suspended. Contact the operator to reactivate."
+            ),
+        )
+    effective = (
+        tenant.daily_limit_override
+        if tenant.daily_limit_override is not None
+        else daily_limit()
+    )
+    if effective == 0:
         return tenant  # quota disabled
     window_start = utcnow() - timedelta(hours=24)
     n = store.count_runs_for_tenant_since(tenant.id, window_start)
-    if n >= limit:
+    if n >= effective:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
-                f"Daily analysis limit reached ({n}/{limit} in the last 24h). "
+                f"Daily analysis limit reached ({n}/{effective} in the last 24h). "
                 "Try again tomorrow, or ask the operator to raise the limit."
             ),
             headers={"Retry-After": str(60 * 60)},  # 1 hour as a polite floor

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BizPulse — Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/ui/css/app.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <script src="/ui/js/app.js"></script>
+</head>
+<body>
+
+<nav class="bzp-nav">
+  <div class="bzp-nav-inner">
+    <a href="/ui/admin.html" class="bzp-brand" style="text-decoration:none; color:var(--bzp-ink);">
+      BizPulse<span class="dot">.</span>
+      <span style="font-family:'Inter'; font-size:0.85rem; color:var(--bzp-accent); font-weight:500; margin-left:0.5rem; letter-spacing:0.04em; text-transform:uppercase;">admin</span>
+    </a>
+    <div class="bzp-nav-links">
+      <a href="/ui/admin.html" class="active">Tenants</a>
+      <a href="#" @click.prevent="$store.admin && $store.admin.signOut()" x-show="localStorage.getItem('bizpulse.admin_key')" style="color:var(--bzp-ink-soft);">Sign out</a>
+    </div>
+  </div>
+</nav>
+
+<div class="bzp-container" x-data="adminPage()">
+
+  <!-- LOGIN MODE -->
+  <template x-if="!authed">
+    <div style="max-width:480px; margin:5rem auto;">
+      <h1 class="bzp-page-title">Operator sign-in</h1>
+      <div class="bzp-page-subtitle">Enter your <code>BIZPULSE_ADMIN_KEY</code>. This is a different key from per-tenant api keys.</div>
+      <div class="bzp-card">
+        <form @submit.prevent="loginAdmin()" autocomplete="off">
+          <label class="bzp-label" for="adminKey">Admin key</label>
+          <input id="adminKey" x-model="adminKey" type="password" placeholder="..." class="bzp-input" required autofocus>
+          <button :disabled="busy" class="bzp-btn bzp-btn-primary" style="width:100%; margin-top:1.25rem; justify-content:center;">
+            <span x-show="!busy">Sign in →</span>
+            <span x-show="busy">Verifying…</span>
+          </button>
+          <div x-show="error" x-text="error" style="color:var(--bzp-danger); font-size:0.88rem; margin-top:0.9rem; text-align:center;"></div>
+          <div x-show="!enabled" style="color:var(--bzp-warning); font-size:0.85rem; margin-top:1rem; text-align:center;">
+            Admin endpoints disabled. Set <code>BIZPULSE_ADMIN_KEY</code> on the server.
+          </div>
+        </form>
+      </div>
+    </div>
+  </template>
+
+  <!-- AUTHED MODE -->
+  <template x-if="authed">
+    <div>
+      <h1 class="bzp-page-title">Tenants</h1>
+      <div class="bzp-page-subtitle">Operator view across every tenant. Edit limits, suspend, or sign in as them.</div>
+
+      <div class="bzp-grid-stats">
+        <div class="bzp-stat">
+          <div class="bzp-stat-label">Tenants</div>
+          <div class="bzp-stat-value" x-text="tenants.length"></div>
+        </div>
+        <div class="bzp-stat">
+          <div class="bzp-stat-label">Active (24h)</div>
+          <div class="bzp-stat-value" x-text="tenants.filter(t => t.runs_today > 0).length"></div>
+        </div>
+        <div class="bzp-stat">
+          <div class="bzp-stat-label">Suspended</div>
+          <div class="bzp-stat-value" x-text="tenants.filter(t => t.suspended).length"></div>
+        </div>
+        <div class="bzp-stat">
+          <div class="bzp-stat-label">Total runs</div>
+          <div class="bzp-stat-value" x-text="tenants.reduce((s,t) => s+t.runs_total, 0)"></div>
+        </div>
+      </div>
+
+      <div class="bzp-card" style="padding:0;">
+        <template x-if="busy">
+          <div class="bzp-empty">Loading…</div>
+        </template>
+        <template x-if="!busy && tenants.length === 0">
+          <div class="bzp-empty">No tenants yet.</div>
+        </template>
+        <template x-if="!busy && tenants.length > 0">
+          <table class="bzp-table">
+            <thead><tr>
+              <th>Tenant</th>
+              <th>Slug</th>
+              <th>Created</th>
+              <th>Today</th>
+              <th>Limit</th>
+              <th>Status</th>
+              <th></th>
+            </tr></thead>
+            <tbody>
+              <template x-for="t in tenants" :key="t.id">
+                <tr>
+                  <td>
+                    <div style="font-weight:500;" x-text="t.name"></div>
+                    <div style="font-family:monospace; font-size:0.7rem; color:var(--bzp-ink-faint);" x-text="t.api_key.slice(0,16)+'…'"></div>
+                  </td>
+                  <td style="font-family:monospace; font-size:0.85rem;" x-text="t.slug"></td>
+                  <td style="color:var(--bzp-ink-soft); font-size:0.85rem;" x-text="fmtDate(t.created_at)"></td>
+                  <td>
+                    <span x-text="t.runs_today"></span>
+                    <span style="color:var(--bzp-ink-faint);"> / </span>
+                    <span x-text="t.runs_total" style="color:var(--bzp-ink-faint); font-size:0.85rem;"></span>
+                  </td>
+                  <td>
+                    <input type="number" min="0" max="1000"
+                           :value="t.daily_limit_override ?? ''"
+                           :placeholder="`(${t.effective_daily_limit})`"
+                           @change="patchLimit(t, $event.target.value)"
+                           class="bzp-input"
+                           style="width:90px; padding:0.3rem 0.5rem; font-size:0.85rem;">
+                  </td>
+                  <td>
+                    <template x-if="t.suspended">
+                      <span class="bzp-pill bzp-pill-danger">suspended</span>
+                    </template>
+                    <template x-if="!t.suspended">
+                      <span class="bzp-pill bzp-pill-success">active</span>
+                    </template>
+                  </td>
+                  <td style="text-align:right; white-space:nowrap;">
+                    <button @click="toggleSuspend(t)" class="bzp-btn bzp-btn-ghost" style="padding:0.3rem 0.7rem; font-size:0.8rem;">
+                      <span x-show="!t.suspended">Suspend</span>
+                      <span x-show="t.suspended">Activate</span>
+                    </button>
+                    <button @click="impersonate(t)" class="bzp-btn bzp-btn-primary" style="padding:0.3rem 0.7rem; font-size:0.8rem; margin-left:0.3rem;">
+                      Sign in as →
+                    </button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </template>
+      </div>
+
+      <div style="text-align:right; margin-top:1rem;">
+        <button @click="load()" class="bzp-btn bzp-btn-ghost" style="font-size:0.85rem;">↻ Refresh</button>
+      </div>
+
+    </div>
+  </template>
+
+</div>
+
+</body>
+</html>

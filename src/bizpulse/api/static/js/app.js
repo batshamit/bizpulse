@@ -2,12 +2,18 @@
 
 const STORAGE_KEY = 'bizpulse.api_key';
 const TENANT_KEY  = 'bizpulse.tenant';
+const ADMIN_KEY   = 'bizpulse.admin_key';
+const IMPERSONATING_KEY = 'bizpulse.impersonating';
 
 function bzpApiKey()    { return localStorage.getItem(STORAGE_KEY) || ''; }
 function bzpSetApiKey(k){ localStorage.setItem(STORAGE_KEY, k); }
-function bzpClearApiKey(){ localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(TENANT_KEY); }
+function bzpClearApiKey(){ localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(TENANT_KEY); localStorage.removeItem(IMPERSONATING_KEY); }
 function bzpTenant()     { try { return JSON.parse(localStorage.getItem(TENANT_KEY) || 'null'); } catch { return null; } }
 function bzpSetTenant(t) { localStorage.setItem(TENANT_KEY, JSON.stringify(t)); }
+function bzpAdminKey()   { return localStorage.getItem(ADMIN_KEY) || ''; }
+function bzpSetAdminKey(k){ localStorage.setItem(ADMIN_KEY, k); }
+function bzpClearAdminKey(){ localStorage.removeItem(ADMIN_KEY); }
+function bzpImpersonating(){ return localStorage.getItem(IMPERSONATING_KEY) === '1'; }
 
 async function bzpFetch(path, opts = {}) {
   const headers = Object.assign({}, opts.headers || {}, { 'Content-Type': 'application/json' });
@@ -141,8 +147,19 @@ document.addEventListener('alpine:init', () => {
 
   Alpine.data('topNav', () => ({
     tenant: null,
-    init() { this.tenant = bzpTenant(); },
+    impersonating: false,
+    init() {
+      this.tenant = bzpTenant();
+      this.impersonating = bzpImpersonating();
+    },
     logout() { bzpClearApiKey(); window.location.href = '/ui/'; },
+    returnToAdmin() {
+      // Clear tenant session but keep admin key so /ui/admin.html auto-resumes.
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(TENANT_KEY);
+      localStorage.removeItem(IMPERSONATING_KEY);
+      window.location.href = '/ui/admin.html';
+    },
   }));
 
   Alpine.data('dashboardPage', () => ({
@@ -247,6 +264,115 @@ document.addEventListener('alpine:init', () => {
     bizIndustry(id) {
       const b = this.businesses.find(b => b.id === id);
       return b ? (b.industry || '—') : '—';
+    },
+  }));
+
+  // ---- admin ---------------------------------------------------------
+
+  async function adminFetch(path, opts = {}) {
+    const headers = Object.assign({}, opts.headers || {}, {
+      'Content-Type': 'application/json',
+      'X-Admin-Key': bzpAdminKey(),
+    });
+    const r = await fetch(path, Object.assign({}, opts, { headers }));
+    const text = await r.text();
+    let body; try { body = JSON.parse(text); } catch { body = text; }
+    if (!r.ok) throw new Error(body && body.detail ? body.detail : `HTTP ${r.status}`);
+    return body;
+  }
+
+  Alpine.data('adminPage', () => ({
+    authed: false,
+    enabled: true,
+    adminKey: '',
+    busy: false,
+    error: '',
+    tenants: [],
+
+    async init() {
+      // Check whether admin endpoints are enabled at all.
+      try {
+        const status = await fetch('/v1/admin/status').then(r => r.json());
+        this.enabled = !!status.enabled;
+      } catch { this.enabled = false; }
+
+      // If we already have a stored admin key, verify it.
+      if (bzpAdminKey()) {
+        try {
+          await this.load();
+          this.authed = true;
+        } catch (e) {
+          bzpClearAdminKey();
+        }
+      }
+    },
+
+    async loginAdmin() {
+      this.error = '';
+      this.busy = true;
+      try {
+        bzpSetAdminKey(this.adminKey.trim());
+        await this.load();
+        this.authed = true;
+      } catch (e) {
+        bzpClearAdminKey();
+        this.error = e.message;
+      } finally { this.busy = false; }
+    },
+
+    async load() {
+      this.busy = true;
+      try {
+        this.tenants = await adminFetch('/v1/admin/tenants');
+      } finally { this.busy = false; }
+    },
+
+    signOut() {
+      bzpClearAdminKey();
+      window.location.reload();
+    },
+
+    fmtDate(iso) {
+      if (!iso) return '—';
+      return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    },
+
+    async patchLimit(tenant, raw) {
+      const trimmed = String(raw).trim();
+      const body = (trimmed === '')
+        ? { clear_daily_limit_override: true }
+        : { daily_limit_override: parseInt(trimmed, 10) };
+      try {
+        const updated = await adminFetch(`/v1/admin/tenants/${tenant.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        });
+        Object.assign(tenant, updated);
+        bzpToast(`Limit updated for ${tenant.name}`);
+      } catch (e) { bzpToast('Update failed: ' + e.message); }
+    },
+
+    async toggleSuspend(tenant) {
+      try {
+        const updated = await adminFetch(`/v1/admin/tenants/${tenant.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ suspended: !tenant.suspended }),
+        });
+        Object.assign(tenant, updated);
+        bzpToast((updated.suspended ? 'Suspended ' : 'Activated ') + tenant.name);
+      } catch (e) { bzpToast('Update failed: ' + e.message); }
+    },
+
+    async impersonate(tenant) {
+      if (!confirm(`Sign in as "${tenant.name}"? You'll see their dashboard with their data.`)) return;
+      try {
+        const r = await adminFetch(`/v1/admin/tenants/${tenant.id}/impersonate`, { method: 'POST' });
+        bzpSetApiKey(r.api_key);
+        bzpSetTenant({ id: r.tenant_id, name: r.name, slug: r.slug, api_key: r.api_key });
+        localStorage.setItem(IMPERSONATING_KEY, '1');
+        bzpToast(`Signed in as ${r.name}`);
+        setTimeout(() => { window.location.href = '/ui/dashboard.html'; }, 400);
+      } catch (e) { bzpToast('Impersonate failed: ' + e.message); }
     },
   }));
 
