@@ -43,14 +43,20 @@ def build_analysis_graph(
     runner: AgentRunner,
     *,
     compliance_council: Council | None = None,
+    sequential: bool = False,
 ) -> Any:
     """Return a compiled langgraph graph that takes AnalysisState and runs
-    the four analyst nodes in parallel, then the strategist, then
-    optionally the compliance_checker.
+    the four analyst nodes (parallel by default), then the strategist,
+    then the compliance_checker.
 
     `compliance_council` defaults to `runner.council` (re-uses the same
     council). Pass a separate one to use cheaper/different vendors for
-    compliance checking (e.g., a single Claude call instead of a debate)."""
+    compliance checking (e.g., a single Claude call instead of a debate).
+
+    `sequential=True` chains the analysts end-to-end so only one LLM call
+    is in flight at a time. Necessary for free-tier vendors with low
+    parallelism limits (Gemini 5 RPM, Mistral shared pool). Set False when
+    you have paid quotas with adequate concurrent throughput."""
     # Lazy import — langgraph is heavy and the package should import-clean
     # without it.
     from langgraph.graph import END, START, StateGraph
@@ -65,19 +71,26 @@ def build_analysis_graph(
     g.add_node("compliance_checker",
                make_compliance_node(compliance_council or runner.council))
 
-    # Fan-out from START.
-    g.add_edge(START, "brand_analyst")
-    g.add_edge(START, "audience_analyst")
-    g.add_edge(START, "competitor_scout")
-    g.add_edge(START, "content_auditor")
+    if sequential:
+        # Free-tier-friendly: chain everyone end-to-end so we never have two
+        # simultaneous LLM calls on the same vendor.
+        g.add_edge(START, "brand_analyst")
+        g.add_edge("brand_analyst",     "audience_analyst")
+        g.add_edge("audience_analyst",  "competitor_scout")
+        g.add_edge("competitor_scout",  "content_auditor")
+        g.add_edge("content_auditor",   "strategist")
+    else:
+        # Parallel: 4 analysts fan out from START, re-converge at strategist.
+        g.add_edge(START, "brand_analyst")
+        g.add_edge(START, "audience_analyst")
+        g.add_edge(START, "competitor_scout")
+        g.add_edge(START, "content_auditor")
+        g.add_edge("brand_analyst",     "strategist")
+        g.add_edge("audience_analyst",  "strategist")
+        g.add_edge("competitor_scout",  "strategist")
+        g.add_edge("content_auditor",   "strategist")
 
-    # Re-converge at strategist.
-    g.add_edge("brand_analyst", "strategist")
-    g.add_edge("audience_analyst", "strategist")
-    g.add_edge("competitor_scout", "strategist")
-    g.add_edge("content_auditor", "strategist")
-
-    # Compliance audit after strategist.
+    # Compliance audit always last.
     g.add_edge("strategist", "compliance_checker")
     g.add_edge("compliance_checker", END)
 

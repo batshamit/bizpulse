@@ -110,34 +110,51 @@ def _pick_embedder():
 
 
 def _pick_council() -> Council | None:
-    """Build the cheapest live council. Caller handles None."""
-    members = build_clients(prefer=["groq", "google", "mistral", "anthropic", "openrouter", "openai"])
-    if not members:
+    """Build a free-tier-safe single-vendor council.
+
+    We deliberately pick ONE member here (not the multi-vendor debate
+    council) because the graph runs 6 agents back-to-back and even
+    sequential execution can exhaust a free-tier vendor's burst quota
+    when `rounds>1`. Vendor preference (most reliable -> least):
+      mistral-small  : shared free pool, generous TPM
+      gemini-2.5-flash: 5 RPM hard cap, but high TPM/call
+      groq           : 12K TPM cap, OK for a couple agents
+      openrouter     : depends on user credits ($)
+
+    The fallback judge is a different vendor if available."""
+    by_vendor: dict[str, callable] = {}
+    if os.environ.get("MISTRAL_API_KEY"):
+        by_vendor["mistral"] = lambda: MistralClient(model="mistral-small-latest")
+    if os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"):
+        from bizpulse.llm.gemini_client import GeminiClient
+        by_vendor["google"] = lambda: GeminiClient(model="gemini-2.5-flash")
+    if os.environ.get("GROQ_API_KEY"):
+        by_vendor["groq"] = lambda: GroqClient(model="llama-3.3-70b-versatile")
+    if os.environ.get("OPENROUTER_API_KEY"):
+        by_vendor["openrouter"] = lambda: OpenRouterClient(model="anthropic/claude-haiku-4-5")
+
+    if not by_vendor:
         return None
-    # Prefer Claude Haiku via OpenRouter for the judge if available
-    # (best at structured synthesis), else Mistral, else first member.
-    judge = members[0]
+
+    # Pick primary in preference order.
+    for v in ("mistral", "google", "groq", "openrouter"):
+        if v in by_vendor:
+            primary = by_vendor[v]()
+            break
+
+    # Pick fallback judge from a different vendor if any.
     fallback = None
-    by_vendor = {m.vendor: m for m in members}
-    if "openrouter" in by_vendor:
-        try:
-            judge = OpenRouterClient(model="anthropic/claude-haiku-4-5")
-        except Exception:
-            pass
-    elif "mistral" in by_vendor:
-        try:
-            judge = MistralClient(model="mistral-small-latest")
-        except Exception:
-            pass
-    elif "groq" in by_vendor:
-        try:
-            judge = GroqClient(model="llama-3.3-70b-versatile")
-        except Exception:
-            pass
-    fallback = next((m for m in members if m is not judge), None)
+    for v in ("groq", "google", "mistral", "openrouter"):
+        if v in by_vendor and v != primary.vendor:
+            try:
+                fallback = by_vendor[v]()
+                break
+            except Exception:
+                continue
+
     return Council(
-        members=members,
-        judge=judge,
+        members=[primary],
+        judge=primary,
         fallback_judge=fallback,
         rounds=1,
         max_tokens=1536,
@@ -243,7 +260,9 @@ async def run_analysis_background(
         council=council,
         industry=business.industry,
     )
-    graph = build_analysis_graph(runner)
+    # Sequential graph for free-tier safety — keeps us at <= 1 in-flight
+    # LLM call across the whole run.
+    graph = build_analysis_graph(runner, sequential=True)
 
     try:
         final = await graph.ainvoke({
