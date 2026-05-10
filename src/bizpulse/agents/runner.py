@@ -66,12 +66,69 @@ class AgentRunError(RuntimeError):
 
 _FENCE_RE = re.compile(r"```(?:json|JSON)?\s*(\{.*?\}|\[.*?\])\s*```", re.DOTALL)
 _OBJECT_RE = re.compile(r"(\{.*\}|\[.*\])", re.DOTALL)
+_FENCE_OPEN_RE = re.compile(r"```(?:json|JSON)?\s*\n?")
+
+
+def _balance_truncated_json(s: str) -> str | None:
+    """If a string starts with `{` or `[` but ends mid-token (truncated by
+    max_tokens), try to recover by closing open braces/brackets. Returns the
+    repaired string or None if not recoverable.
+
+    Heuristic — works for clean truncations of well-formed JSON. Strips a
+    trailing partial token (incomplete string, incomplete number) before
+    appending the close characters."""
+    s = s.strip()
+    if not s or s[0] not in "{[":
+        return None
+    stack: list[str] = []
+    in_string = False
+    escape = False
+    last_safe = 0  # index after the last char that was outside a string
+    for i, ch in enumerate(s):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            if not in_string:
+                last_safe = i + 1
+            continue
+        if in_string:
+            continue
+        if ch in "{[":
+            stack.append(ch)
+            last_safe = i + 1
+        elif ch in "}]":
+            if not stack:
+                return None
+            opener = stack.pop()
+            if (opener == "{" and ch != "}") or (opener == "[" and ch != "]"):
+                return None
+            last_safe = i + 1
+        elif ch in ",:":
+            last_safe = i + 1
+        elif ch.isspace():
+            pass  # whitespace doesn't move last_safe back
+        elif ch.isalnum() or ch in "+-.":
+            # part of a number, true/false/null — don't move last_safe; we'll
+            # roll back to the last safe point if we end mid-token
+            pass
+    if not stack:
+        return s if not in_string else None
+    # Roll back any trailing partial token, strip a trailing comma if present.
+    head = s[:last_safe].rstrip().rstrip(",")
+    closers = "".join("}" if o == "{" else "]" for o in reversed(stack))
+    return head + closers
 
 
 def extract_json(text: str) -> object:
     """Best-effort JSON extraction from a model response.
 
-    Tries: (1) direct, (2) fenced code block, (3) first {...} or [...] in text.
+    Tries: (1) direct, (2) fenced code block, (3) first {...} or [...] in
+    text, (4) brace-balance recovery for truncated max_tokens responses.
     Raises ValueError if no parseable JSON found.
     """
     text = text.strip()
@@ -80,7 +137,7 @@ def extract_json(text: str) -> object:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
-    # 2. fenced
+    # 2. closed fenced code block
     m = _FENCE_RE.search(text)
     if m:
         try:
@@ -92,6 +149,18 @@ def extract_json(text: str) -> object:
     if m:
         try:
             return json.loads(m.group(1))
+        except json.JSONDecodeError:
+            pass
+    # 4. recovery from truncation: strip leading fence opener if present,
+    #    then close any open braces/brackets.
+    candidate = text
+    fence_open = _FENCE_OPEN_RE.match(candidate)
+    if fence_open:
+        candidate = candidate[fence_open.end():]
+    repaired = _balance_truncated_json(candidate)
+    if repaired:
+        try:
+            return json.loads(repaired)
         except json.JSONDecodeError:
             pass
     raise ValueError(f"no parseable JSON in response: {text[:200]}")

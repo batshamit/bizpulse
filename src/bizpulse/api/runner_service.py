@@ -157,7 +157,9 @@ def _pick_council() -> Council | None:
         judge=primary,
         fallback_judge=fallback,
         rounds=1,
-        max_tokens=1536,
+        # 3072 gives MarketingStrategy (the biggest schema) room to fit + a
+        # repair pass; smaller schemas use fewer tokens and don't pay extra.
+        max_tokens=3072,
     )
 
 
