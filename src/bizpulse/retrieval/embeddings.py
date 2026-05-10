@@ -154,16 +154,19 @@ class TEIReranker(TEIEmbedder):
 # --- Gemini embedder ------------------------------------------------------
 
 class GeminiEmbedder:
-    """Async embedder using Google AI Studio's gemini-embedding-001 (768-dim).
+    """Async embedder using Google AI Studio's `gemini-embedding-001`.
+
+    The model is Matryoshka-trained: it natively supports 768 / 1536 / 3072
+    output dimensions via the `outputDimensionality` parameter. We default
+    to 768 to keep Qdrant storage compact and search latency low; bump to
+    1536 or 3072 if recall@10 evals show it pays off.
 
     Free-tier-friendly. Used when TEI isn't running locally — common for
     portfolio demos where a GPU isn't available.
 
-    Note: as of mid-2026 the working model name is `gemini-embedding-001`.
-    The older `text-embedding-004` returns 404 on v1beta. Override via
-    `model_name=` if Google ships a new identifier."""
+    Note: the older `text-embedding-004` returns 404 on v1beta as of mid-2026.
+    Override `model_name=` if Google ships a new identifier."""
 
-    embed_dim = 768
     model = "gemini-embedding-001"
 
     def __init__(
@@ -173,17 +176,24 @@ class GeminiEmbedder:
         timeout: float = 30.0,
         max_retries: int = 3,
         batch_size: int = 50,
+        output_dim: int = 768,
     ) -> None:
         key = api_key or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
         if not key:
             raise RuntimeError(
                 "GeminiEmbedder needs GOOGLE_API_KEY (or GEMINI_API_KEY) in env"
             )
+        if output_dim not in (768, 1536, 3072):
+            raise ValueError(
+                f"output_dim must be 768, 1536, or 3072 (Matryoshka tiers); got {output_dim}"
+            )
         self._key = key
         self._model_name = model_name
         self._timeout = timeout
         self._max_retries = max_retries
         self._batch_size = batch_size
+        self._output_dim = output_dim
+        self.embed_dim = output_dim
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
@@ -205,6 +215,7 @@ class GeminiEmbedder:
                 {
                     "model": f"models/{self._model_name}",
                     "content": {"parts": [{"text": t}]},
+                    "outputDimensionality": self._output_dim,
                 }
                 for t in texts
             ]
