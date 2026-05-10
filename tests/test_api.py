@@ -14,6 +14,19 @@ def clean_store() -> None:
     reset_default_store_for_tests()
 
 
+@pytest.fixture(autouse=True)
+def open_signup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Disable the signup-code gate for these tests so direct POSTs work
+    without a header. The gate itself is covered by tests/test_signup_gate.py."""
+    monkeypatch.delenv("BIZPULSE_SIGNUP_CODE", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def open_quota(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Disable the daily quota for these tests (analyze should always work)."""
+    monkeypatch.setenv("BIZPULSE_DAILY_ANALYSIS_LIMIT", "0")
+
+
 def test_root_and_healthz() -> None:
     with TestClient(app) as client:
         assert client.get("/healthz").json()["status"] == "ok"
