@@ -39,11 +39,21 @@ def get_default_store() -> Store:
 def reset_default_store_for_tests() -> None:
     """Wipe the singleton so tests start from a fresh InMemoryStore.
 
+    If the previous singleton was a PostgresStore, close its connection
+    pool first — otherwise the orphaned pool keeps holding PG connections
+    and successive test resets exhaust max_connections (we hit ~100
+    leaked conns after ~15 resets in CI).
+
     Note: when BIZPULSE_STORE=postgres, this re-creates a PostgresStore
     pointing at the same DB — it does NOT truncate tables. Tests that
     target Postgres must clean up after themselves.
     """
     global _default_store
+    if _default_store is not None and isinstance(_default_store, PostgresStore):
+        try:
+            _default_store.close()
+        except Exception:  # noqa: BLE001 — best-effort cleanup
+            pass
     _default_store = None
 
 
