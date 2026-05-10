@@ -146,12 +146,16 @@ class AgentRunner:
         retrieval_result = await self.retrieval.search(rq)
         context_chunks = retrieval_result.chunks
 
-        # 2. Build prompts.
+        # 2. Build prompts. Embed the JSON schema so weaker models don't
+        #    invent field names. We strip a couple of noisy keys (title,
+        #    description) to keep the prompt compact.
+        schema_json = json.dumps(_compact_schema(output_schema), indent=2)
         system, user = self.prompts.build(
             agent=agent,
             task=task,
             context_chunks=context_chunks,
             output_schema_name=output_schema.__name__,
+            output_schema_json=schema_json,
         )
 
         # 3. Run debate.
@@ -204,15 +208,38 @@ class AgentRunner:
         error: str,
     ) -> T:
         """Re-ask the judge for a corrected JSON output, given the validation error."""
+        schema_json = json.dumps(_compact_schema(output_schema), indent=2)
         repair_user = (
             f"Your previous response did not pass schema validation against "
             f"{output_schema.__name__}. The error was:\n\n{error}\n\n"
+            f"The exact JSON Schema is:\n```json\n{schema_json}\n```\n\n"
             f"Your previous text was:\n\n{council_result.final}\n\n"
-            "Reply with ONLY a corrected JSON object that matches the schema. "
-            "No prose, no code fences."
+            "Reply with ONLY a corrected JSON object that matches the schema "
+            "exactly. Use the field names from the schema (case-sensitive). "
+            "No prose, no fences, no extra fields."
         )
         cr = await self.council.judge.complete(
             system=system, user=repair_user, max_tokens=4096, temperature=0.0
         )
         data = extract_json(cr.text)
         return output_schema.model_validate(data)
+
+
+def _compact_schema(model: type[BaseModel]) -> dict[str, object]:
+    """Strip noisy keys (title, description, examples) from a Pydantic model
+    JSON schema so the prompt stays focused on shape."""
+    schema = model.model_json_schema()
+
+    def strip(node: object) -> object:
+        if isinstance(node, dict):
+            out = {}
+            for k, v in node.items():
+                if k in {"title", "description", "examples"}:
+                    continue
+                out[k] = strip(v)
+            return out
+        if isinstance(node, list):
+            return [strip(v) for v in node]
+        return node
+
+    return strip(schema)  # type: ignore[return-value]

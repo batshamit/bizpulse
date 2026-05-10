@@ -84,10 +84,25 @@ class PromptBuilder:
         task: str,
         context_chunks: list[RetrievedChunk],
         output_schema_name: str,
+        output_schema_json: str | None = None,
     ) -> str:
-        """User-side prompt. Presents the task, context, and schema name."""
+        """User-side prompt. Presents the task, context, and schema.
+
+        If `output_schema_json` is supplied, it is included verbatim as a
+        fenced JSON-Schema block — drastically reduces field-name drift on
+        models that haven't been fine-tuned to BizPulse types.
+        """
         parts: list[str] = [f"Task: {task}", ""]
-        parts.append(f"Output schema: `{output_schema_name}`. Reply with a JSON object matching it.")
+        if output_schema_json:
+            parts.append(
+                f"Reply with ONLY a JSON object matching this exact schema "
+                f"({output_schema_name}). No prose, no code fences, no extra "
+                f"fields:\n```json\n{output_schema_json}\n```"
+            )
+        else:
+            parts.append(
+                f"Output schema: `{output_schema_name}`. Reply with a JSON object matching it."
+            )
         parts.append("")
         parts.append("Retrieved context (cite chunk_ids in your output):")
         if not context_chunks:
@@ -109,8 +124,12 @@ class PromptBuilder:
         task: str,
         context_chunks: list[RetrievedChunk],
         output_schema_name: str,
+        output_schema_json: str | None = None,
     ) -> tuple[str, str]:
-        return self.system_prompt(agent), self.user_prompt(task, context_chunks, output_schema_name)
+        return (
+            self.system_prompt(agent),
+            self.user_prompt(task, context_chunks, output_schema_name, output_schema_json),
+        )
 
     # ---------- internals -------------------------------------------------
 
