@@ -11,6 +11,7 @@ from typing import Literal
 
 from pydantic import Field, field_validator
 
+from bizpulse.models.agents import AgentTrace
 from bizpulse.models.citations import Citation, _coerce_chunk_id
 from bizpulse.models.common import BusinessId, ChunkId, StrictModel, TenantId
 from bizpulse.models.compliance import ComplianceReport
@@ -160,6 +161,10 @@ class MarketingStrategy(StrictModel):
     compliance_report: ComplianceReport | None = Field(
         default=None,
         description="Attached by the compliance_checker agent after synthesis. None when compliance was skipped.",
+    )
+    agent_traces: list[AgentTrace] = Field(
+        default_factory=list,
+        description="Per-node trace from the LangGraph run — agent name, status, duration, retry count, error if any.",
     )
 
     @field_validator("recommendations")

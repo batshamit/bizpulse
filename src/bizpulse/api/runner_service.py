@@ -335,12 +335,15 @@ async def run_analysis_background(
         _set("failed", error="; ".join(errors)[:500] or "no final_strategy produced")
         return
 
-    # 4. Attach compliance to the strategy + persist via run update.
-    if compliance is not None:
-        try:
-            strategy = strategy.model_copy(update={"compliance_report": compliance})
-        except Exception:
-            pass
+    # 4. Attach compliance + agent_traces to the strategy + persist.
+    traces = final.get("agent_traces") or []
+    try:
+        strategy = strategy.model_copy(update={
+            "compliance_report": compliance,
+            "agent_traces": traces,
+        })
+    except Exception as exc:  # noqa: BLE001
+        log.warning("runner.merge_failed", error=str(exc)[:200])
 
     _persist_final_output(store=store, run_id=run_id, strategy=strategy)
     # Persist cost / token totals from the runner's accumulators.

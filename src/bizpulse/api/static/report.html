@@ -154,13 +154,19 @@
               · Overall score <strong x-text="(run.final_output.compliance_report.overall_compliance_score * 100).toFixed(0) + '%'"></strong>
             </div>
 
+            <div style="background:var(--bzp-cream); border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:0.9rem 1.1rem; margin-bottom:1rem; font-size:0.85rem; color:var(--bzp-ink-soft);">
+              <strong style="color:var(--bzp-ink);">The 4 L's — Customer-Inclusivity Scorecard</strong><br>
+              Measures how well this strategy serves the typically-overlooked end of the customer spectrum.
+              Higher score = strategy actively includes the under-served.
+            </div>
             <div class="bzp-llll-grid">
-              <template x-for="key in ['latest','least','lost','lowest']" :key="key">
+              <template x-for="key in [['last','LAST customer', 'late adopters · newcomers · waitlist'], ['least','LEAST-considered', 'minorities · accessibility · regional · rural'], ['lost','LOST customers', 'churned · cart-abandoners · dormant'], ['lowest','LOWEST budget', 'price-sensitive · EMI · freemium · students']]" :key="key[0]">
                 <div class="bzp-llll-card">
-                  <div class="bzp-llll-letter" x-text="key.charAt(0).toUpperCase()"></div>
-                  <div class="bzp-llll-name" x-text="key"></div>
-                  <div class="bzp-llll-value" x-text="(run.final_output.compliance_report.metrics[key]*100).toFixed(0) + '%'"></div>
-                  <div class="bzp-llll-bar"><span :style="`width: ${run.final_output.compliance_report.metrics[key]*100}%`"></span></div>
+                  <div class="bzp-llll-letter" x-text="key[0].charAt(0).toUpperCase()"></div>
+                  <div class="bzp-llll-name" x-text="key[1]"></div>
+                  <div class="bzp-llll-value" x-text="((run.final_output.compliance_report.metrics[key[0]] || 0)*100).toFixed(0) + '%'"></div>
+                  <div class="bzp-llll-bar"><span :style="`width: ${(run.final_output.compliance_report.metrics[key[0]] || 0)*100}%`"></span></div>
+                  <div style="font-size:0.65rem; color:var(--bzp-ink-faint); margin-top:0.3rem;" x-text="key[2]"></div>
                 </div>
               </template>
             </div>
@@ -188,14 +194,24 @@
       <div x-show="activeTab === 'agents'">
         <div class="bzp-card">
           <h2>Agent traces</h2>
-          <template x-if="!run.agent_traces?.length">
-            <div class="bzp-empty">No agent traces recorded yet.</div>
+          <div style="color:var(--bzp-ink-soft); font-size:0.88rem; margin-bottom:1rem;">
+            Per-node execution log from the LangGraph run. Each analyst, the strategist, and the compliance checker emit one trace.
+          </div>
+          <template x-if="!agentTraces().length">
+            <div class="bzp-empty">No agent traces recorded for this run.</div>
           </template>
-          <template x-for="t in (run.agent_traces || [])" :key="t.id">
-            <div style="border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:1rem; margin:0.6rem 0;">
-              <div><strong x-text="t.agent"></strong> · <span class="bzp-pill" :class="`bzp-pill-${t.status === 'ok' ? 'success' : 'danger'}`" x-text="t.status"></span></div>
-              <div style="font-size:0.8rem; color:var(--bzp-ink-faint);" x-text="`${t.retries} retries · ${t.duration_ms?.toFixed(0)}ms`"></div>
-              <div x-show="t.error" style="color:var(--bzp-danger); margin-top:0.3rem;" x-text="t.error"></div>
+          <template x-for="t in agentTraces()" :key="t.id || t.agent">
+            <div style="border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:0.9rem 1.1rem; margin:0.6rem 0;">
+              <div style="display:flex; gap:0.5rem; align-items:center;">
+                <strong x-text="t.agent" style="font-family:'JetBrains Mono', monospace; font-size:0.9rem;"></strong>
+                <span class="bzp-pill" :class="`bzp-pill-${t.status === 'ok' ? 'success' : (t.status === 'retry' ? 'warning' : 'danger')}`" x-text="t.status"></span>
+                <span x-show="t.retries > 0" class="bzp-pill bzp-pill-warning" x-text="`${t.retries} retr${t.retries===1?'y':'ies'}`"></span>
+              </div>
+              <div style="font-size:0.78rem; color:var(--bzp-ink-faint); margin-top:0.4rem;">
+                <span x-text="t.started_at ? fmtTime(t.started_at) : ''"></span>
+                <span x-show="t.duration_ms != null"> · <span x-text="(t.duration_ms || 0).toFixed(0) + 'ms'"></span></span>
+              </div>
+              <div x-show="t.error" style="color:var(--bzp-danger); margin-top:0.5rem; font-size:0.85rem; font-family:monospace; word-break:break-word;" x-text="t.error"></div>
             </div>
           </template>
         </div>

@@ -81,33 +81,45 @@ class ComplianceFlag(StrictModel):
 
 
 class LLLLMetric(StrictModel):
-    """The 4 L's headline scoreboard — what the report changes vs. status quo.
+    """The 4 L's — does this strategy actually serve the under-served?
 
-    Each metric is in [0, 1] where 1 = best. The narrative one-liner is what
-    shows up on the dashboard."""
+    Customer-perspective inclusivity scoreboard (NOT the regulator's view).
+    Each axis measures how well the recommendations include the typically-
+    overlooked end of the customer spectrum. All values in [0, 1] where
+    1 = strategy genuinely serves this segment; 0 = strategy ignores them.
+    """
 
-    latest: float = Field(ge=0.0, le=1.0)
-    """Latest — how recent are the regulations this report honors? (1.0 = within
-    last 12 months; 0.5 = within 24 months; lower = older)."""
+    last: float = Field(ge=0.0, le=1.0)
+    """Last — the LAST customer in line. Late adopters, newcomers without
+    history, waitlist / non-priority queues, low-engagement segments.
+    1.0 = strategy has explicit onboarding / accessibility for first-timers
+    and patient-customer flows."""
 
     least: float = Field(ge=0.0, le=1.0)
-    """Least — least penalty exposure across the recommendation set
-    (1.0 = no critical/violation flags; lower = more exposure)."""
+    """Least — the LEAST-considered audience. Minorities, regional /
+    linguistic / accessibility / disability / senior-citizen / women-led
+    SMB / rural / tier-3+ segments. 1.0 = explicit channels / creative /
+    pricing for these audiences; 0 = generic mass-market only."""
 
     lost: float = Field(ge=0.0, le=1.0)
-    """Lost-revenue avoided — strategies that respect compliance avoid takedowns,
-    refunds, churn (1.0 = high avoidance; lower = exposed to losses)."""
+    """Lost — LOST or churned customers. Win-back, cart-abandoners, dormant
+    accounts, prior cancellations. 1.0 = strategy has a named win-back
+    motion with specific creative / incentive / channel; 0 = no recovery
+    play."""
 
     lowest: float = Field(ge=0.0, le=1.0)
-    """Lowest cost-of-compliance — measured as overhead added vs. value delivered
-    (1.0 = cheap to comply; lower = expensive controls required)."""
+    """Lowest — the LOWEST-budget tier. Price-sensitive, financial-inclusion,
+    first-job earners, students, micro-MSMEs, beneficiaries of subsidies.
+    1.0 = entry tier / freemium / EMI / instalment offerings are part of
+    the strategy; 0 = only premium / high-LTV segments served."""
 
     narrative: Annotated[str, Field(min_length=1)]
-    """1-3 sentences explaining the scores in plain language."""
+    """1-3 sentences explaining how the strategy serves (or misses) the
+    under-served customers along each axis."""
 
     @property
     def average(self) -> float:
-        return (self.latest + self.least + self.lost + self.lowest) / 4.0
+        return (self.last + self.least + self.lost + self.lowest) / 4.0
 
 
 class CompetitorComplianceCompare(StrictModel):

@@ -17,6 +17,7 @@ from bizpulse.models import (
     ContentAudit,
     MarketingStrategy,
 )
+from bizpulse.models.agents import AgentTrace
 from bizpulse.models.compliance import ComplianceReport
 
 
@@ -58,3 +59,8 @@ class AnalysisState(TypedDict, total=False):
     repair_attempts: Annotated[list[str], _append]
     """Names of agents that needed a JSON-repair pass — useful in the
     Critic decision and the demo audit log."""
+
+    agent_traces: Annotated[list[AgentTrace], _append]
+    """Per-node trace — every analyst + strategist + compliance node
+    appends one AgentTrace before returning. Persisted into
+    MarketingStrategy.agent_traces so the GUI can render the 'Agents' tab."""

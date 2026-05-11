@@ -115,7 +115,12 @@
                 <tr>
                   <td>
                     <div style="font-weight:500;" x-text="t.name"></div>
-                    <div style="font-family:monospace; font-size:0.7rem; color:var(--bzp-ink-faint);" x-text="t.api_key.slice(0,16)+'…'"></div>
+                    <div style="display:flex; gap:0.3rem; align-items:center; margin-top:0.2rem;">
+                      <code style="font-size:0.7rem; color:var(--bzp-ink-faint); user-select:all; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" :title="t.api_key" x-text="t.api_key"></code>
+                      <button @click="copyKey(t)" class="bzp-btn bzp-btn-ghost"
+                              style="padding:0.1rem 0.4rem; font-size:0.7rem; line-height:1;"
+                              title="Copy api_key to clipboard">📋</button>
+                    </div>
                   </td>
                   <td style="font-family:monospace; font-size:0.85rem;" x-text="t.slug"></td>
                   <td style="color:var(--bzp-ink-soft); font-size:0.85rem;" x-text="fmtDate(t.created_at)"></td>

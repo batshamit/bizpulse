@@ -392,6 +392,13 @@ document.addEventListener('alpine:init', () => {
       } catch (e) { bzpToast('Delete failed: ' + e.message); }
     },
 
+    async copyKey(tenant) {
+      try {
+        await navigator.clipboard.writeText(tenant.api_key);
+        bzpToast(`Copied ${tenant.name}'s api_key to clipboard`);
+      } catch (e) { bzpToast('Copy failed: ' + e.message); }
+    },
+
     async impersonate(tenant) {
       if (!confirm(`Sign in as "${tenant.name}"? You'll see their dashboard with their data.`)) return;
       try {
@@ -447,6 +454,21 @@ document.addEventListener('alpine:init', () => {
     runId: '', run: null, business: null, busy: true, error: '',
     activeTab: 'strategy',
     retrying: false,
+    agentTraces() {
+      // Look in both places — traces live on RunRecord.agent_traces and on
+      // MarketingStrategy.agent_traces (where the runner_service persists them).
+      const fromRun = this.run?.agent_traces || [];
+      const fromStrategy = this.run?.final_output?.agent_traces || [];
+      const seen = new Set();
+      const out = [];
+      for (const t of [...fromRun, ...fromStrategy]) {
+        const k = (t.id || '') + ':' + (t.agent || '');
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push(t);
+      }
+      return out;
+    },
     async init() {
       if (!bzpRequireLogin()) return;
       const params = new URLSearchParams(window.location.search);
