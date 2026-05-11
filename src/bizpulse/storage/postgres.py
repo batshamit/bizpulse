@@ -310,6 +310,81 @@ class PostgresStore:
             cur.execute("DELETE FROM tenants WHERE id::text = ANY(%s)", (ids,))
         return targets
 
+    # ----- reference documents (uploads) -------------------------------
+
+    def insert_document(self, **kw) -> dict:
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO business_documents "
+                "  (id, tenant_id, business_id, filename, content_type, "
+                "   size_bytes, n_chunks, sha256, extracted_chars) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) "
+                "ON CONFLICT (business_id, sha256) DO UPDATE SET filename = EXCLUDED.filename "
+                "RETURNING id::text, filename, content_type, size_bytes, "
+                "          n_chunks, extracted_chars, sha256, uploaded_at",
+                (
+                    str(kw["id"]),
+                    str(kw["tenant_id"]),
+                    str(kw["business_id"]),
+                    kw["filename"],
+                    kw["content_type"],
+                    kw["size_bytes"],
+                    kw["n_chunks"],
+                    kw["sha256"],
+                    kw.get("extracted_chars", 0),
+                ),
+            )
+            row = cur.fetchone()
+        return {
+            "id": row[0], "filename": row[1], "content_type": row[2],
+            "size_bytes": row[3], "n_chunks": row[4], "extracted_chars": row[5],
+            "sha256": row[6], "uploaded_at": row[7].isoformat() if row[7] else None,
+        }
+
+    def find_document_by_sha(self, business_id: BusinessId, sha256: str) -> dict | None:
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id::text, filename, content_type, size_bytes, "
+                "       n_chunks, extracted_chars, sha256, uploaded_at "
+                "FROM business_documents WHERE business_id = %s AND sha256 = %s",
+                (str(business_id), sha256),
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0], "filename": row[1], "content_type": row[2],
+            "size_bytes": row[3], "n_chunks": row[4], "extracted_chars": row[5],
+            "sha256": row[6], "uploaded_at": row[7].isoformat() if row[7] else None,
+        }
+
+    def list_documents(self, business_id: BusinessId) -> list[dict]:
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id::text, filename, content_type, size_bytes, "
+                "       n_chunks, extracted_chars, sha256, uploaded_at "
+                "FROM business_documents WHERE business_id = %s "
+                "ORDER BY uploaded_at DESC",
+                (str(business_id),),
+            )
+            rows = cur.fetchall()
+        return [
+            {
+                "id": r[0], "filename": r[1], "content_type": r[2],
+                "size_bytes": r[3], "n_chunks": r[4], "extracted_chars": r[5],
+                "sha256": r[6], "uploaded_at": r[7].isoformat() if r[7] else None,
+            }
+            for r in rows
+        ]
+
+    def delete_document(self, business_id: BusinessId, document_id: UUID) -> bool:
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM business_documents WHERE id = %s AND business_id = %s",
+                (str(document_id), str(business_id)),
+            )
+            return cur.rowcount > 0
+
     def insert_audit(self, **kw) -> UUID:
         import json
         details = kw.get("details") or {}

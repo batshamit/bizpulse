@@ -288,10 +288,12 @@ async def run_analysis_background(
     if not artifacts:
         artifacts = [_synthetic_artifact(business)]
 
-    # 2. Ingest (chunk + embed + upsert).
+    # 2. Ingest (chunk + embed + upsert). Use a per-BUSINESS Qdrant path
+    # (not per-run) so uploaded reference docs from /v1/businesses/{id}/documents
+    # are visible in the same collection.
     _set("embedding")
     embedder = _pick_embedder()
-    qd_dir = _QDRANT_BASE / f"run-{run_id}"
+    qd_dir = _QDRANT_BASE / f"biz-{business.id}"
     qd_dir.mkdir(parents=True, exist_ok=True)
     repo = TenantQdrant(business.tenant_id, client=QdrantClient(path=str(qd_dir)))
     pipe = IngestionPipeline(repo, embedder, industry=business.industry, batch_size=24)

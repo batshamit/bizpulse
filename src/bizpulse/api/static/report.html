@@ -86,6 +86,10 @@
                 <div style="font-size:1.1rem; color:var(--bzp-danger); margin-bottom:0.6rem;">
                   Analysis failed
                 </div>
+                <div style="margin-bottom:1rem; padding:0.7rem 1rem; background:var(--bzp-warning-soft); border-radius:var(--bzp-radius); font-size:0.85rem; color:var(--bzp-warning);">
+                  💡 Tip: upload reference docs in the <strong>Documents</strong> tab first
+                  to give the next run more context.
+                </div>
                 <div x-show="run.error" x-text="run.error" style="font-size:0.85rem; color:var(--bzp-ink-soft); background:var(--bzp-danger-soft); padding:0.8rem; border-radius:var(--bzp-radius); margin-bottom:1rem; text-align:left; font-family:monospace; word-break:break-word;"></div>
                 <div style="display:flex; gap:0.6rem; justify-content:center;">
                   <button @click="retry()" :disabled="retrying" class="bzp-btn bzp-btn-primary">
@@ -188,6 +192,71 @@
             </template>
           </div>
         </template>
+      </div>
+
+      <!-- Documents tab -->
+      <div x-show="activeTab === 'documents'">
+        <div class="bzp-card">
+          <h2>Reference documents</h2>
+          <div style="color:var(--bzp-ink-soft); font-size:0.9rem; margin-bottom:1.2rem;">
+            Upload your own policies, prior reports, or brand-guidelines docs.
+            Their text gets chunked + embedded into this business's knowledge base.
+            Re-run the analysis after uploading to have the agents cite them.
+          </div>
+
+          <!-- drop zone -->
+          <div @dragover.prevent="dragHover=true"
+               @dragleave.prevent="dragHover=false"
+               @drop.prevent="handleDrop($event)"
+               :style="dragHover ? 'background:var(--bzp-accent-soft); border-color:var(--bzp-accent);' : ''"
+               style="border:2px dashed var(--bzp-border); border-radius:var(--bzp-radius); padding:1.5rem; text-align:center; cursor:pointer; transition:all 0.15s;"
+               @click="$refs.fileInput.click()">
+            <input x-ref="fileInput" type="file" @change="handleFiles($event.target.files)"
+                   accept=".pdf,.docx,.txt,.md,.html,.htm,.csv,.log"
+                   style="display:none;" multiple>
+            <div style="font-size:1.1rem; color:var(--bzp-ink); margin-bottom:0.3rem;">
+              📎 Drop files here or click to choose
+            </div>
+            <div style="font-size:0.8rem; color:var(--bzp-ink-faint);">
+              PDF · DOCX · TXT · MD · HTML · CSV · up to 20 MB each
+            </div>
+          </div>
+
+          <div x-show="docUploadError" x-text="docUploadError"
+               style="color:var(--bzp-danger); font-size:0.85rem; margin-top:0.6rem;"></div>
+          <div x-show="docUploading" style="color:var(--bzp-ink-soft); font-size:0.85rem; margin-top:0.6rem;">
+            Uploading <span x-text="docUploading"></span>… (parsing + embedding)
+          </div>
+
+          <template x-if="documents.length > 0">
+            <div style="margin-top:1.5rem;">
+              <h3 style="margin-bottom:0.6rem;">Uploaded so far</h3>
+              <table class="bzp-table">
+                <thead><tr><th>Filename</th><th>Type</th><th>Size</th><th>Chunks</th><th>Uploaded</th><th></th></tr></thead>
+                <tbody>
+                  <template x-for="d in documents" :key="d.id">
+                    <tr>
+                      <td style="font-weight:500;" x-text="d.filename"></td>
+                      <td style="color:var(--bzp-ink-soft); font-size:0.82rem; font-family:monospace;" x-text="d.content_type"></td>
+                      <td style="color:var(--bzp-ink-soft);" x-text="fmtBytes(d.size_bytes)"></td>
+                      <td><span x-text="d.n_chunks"></span> <span style="color:var(--bzp-ink-faint); font-size:0.78rem;" x-text="'(' + (d.extracted_chars || 0).toLocaleString() + ' chars)'"></span></td>
+                      <td style="color:var(--bzp-ink-soft); font-size:0.85rem;" x-text="fmtTime(d.uploaded_at)"></td>
+                      <td style="text-align:right;">
+                        <button @click="deleteDoc(d)" class="bzp-btn bzp-btn-ghost" style="padding:0.3rem 0.6rem; font-size:0.78rem; color:var(--bzp-danger);">Remove</button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+              <div style="margin-top:1rem; padding:1rem; background:var(--bzp-accent-soft); border-radius:var(--bzp-radius); font-size:0.88rem; color:var(--bzp-accent-dark);">
+                📝 Click <strong>Retry analysis</strong> on the Strategy tab to re-run with these docs as additional context.
+              </div>
+            </div>
+          </template>
+          <template x-if="documentsLoaded && documents.length === 0">
+            <div style="margin-top:1.5rem; color:var(--bzp-ink-faint); font-size:0.9rem;">No documents uploaded yet.</div>
+          </template>
+        </div>
       </div>
 
       <!-- Agents tab -->
