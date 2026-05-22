@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any
 
 from bizpulse.llm.base import (
-    PRICING_PER_1K,
     CompletionResult,
     LLMError,
     estimate_cost,
@@ -70,7 +68,7 @@ class AnthropicClient:
                 system=system,
                 messages=[{"role": "user", "content": user}],
             )
-        except Exception as exc:  # noqa: BLE001 — anthropic raises hierarchy of types
+        except Exception as exc:
             retryable = "rate" in str(exc).lower() or "overloaded" in str(exc).lower()
             raise LLMError(
                 f"anthropic call failed: {exc}",
@@ -94,5 +92,8 @@ class AnthropicClient:
             output_tokens=out_tok,
             cost_usd=cost,
             latency_ms=latency_ms,
-            raw={"id": getattr(resp, "id", None), "stop_reason": getattr(resp, "stop_reason", None)},
+            raw={
+                "id": getattr(resp, "id", None),
+                "stop_reason": getattr(resp, "stop_reason", None),
+            },
         )

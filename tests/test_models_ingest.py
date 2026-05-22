@@ -44,9 +44,9 @@ def test_embedded_chunk_dim_mismatch_rejected() -> None:
     with pytest.raises(ValidationError):
         EmbeddedChunk(
             chunk=chunk,
-            vector=[0.1, 0.2, 0.3],   # 3 dims
+            vector=[0.1, 0.2, 0.3],  # 3 dims
             embed_model="bge-large-en-v1.5",
-            embed_dim=1024,           # claimed 1024 → mismatch
+            embed_dim=1024,  # claimed 1024 → mismatch
         )
 
 
@@ -62,7 +62,7 @@ def test_retrieval_query_clamps_top_k() -> None:
         RetrievalQuery(
             text="positioning",
             tenant_id=uuid4(),
-            top_k=0,    # below minimum
+            top_k=0,  # below minimum
         )
     with pytest.raises(ValidationError):
         RetrievalQuery(

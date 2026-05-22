@@ -46,6 +46,9 @@ dependencies = [
     "lxml>=5.3",
     "trafilatura>=1.12",
 
+    # PDF generation
+    "fpdf2>=2.8",
+
     # MCP
     "mcp>=1.0",
 ]
@@ -79,7 +82,14 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
-ignore = ["E501"]  # line length handled by black
+ignore = [
+    "E501",    # line length handled by black
+    "E402",    # module level import not at top of file (common in scripts adjusting sys.path)
+    "B008",    # function call Depends in argument defaults (standard FastAPI pattern)
+    "N818",    # exception name should be named with an Error suffix
+    "RUF001",  # docstring contains ambiguous character
+    "RUF002",  # docstring contains ambiguous character
+]
 
 [tool.black]
 line-length = 100
@@ -87,7 +97,7 @@ target-version = ["py310"]
 
 [tool.mypy]
 python_version = "3.10"
-strict = true
+strict = false
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -10,8 +10,7 @@ Council debate.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 from bizpulse.llm.base import CompletionResult, LLMError
 
@@ -99,7 +98,9 @@ class ScriptedLLMClient:
         max_tokens: int = 4096,
         temperature: float = 0.2,
     ) -> CompletionResult:
-        self.calls.append(_Call(system=system, user=user, max_tokens=max_tokens, temperature=temperature))
+        self.calls.append(
+            _Call(system=system, user=user, max_tokens=max_tokens, temperature=temperature)
+        )
         if self._index >= len(self._responses):
             raise LLMError(
                 f"ScriptedLLMClient {self.name!r} ran out of scripted responses "

@@ -38,7 +38,8 @@ def test_industry_pack_lists_match_loaded_yaml() -> None:
     assert "RBI" in str(pack)
 
 
-def test_business_lifecycle() -> None:
+@pytest.mark.asyncio
+async def test_business_lifecycle() -> None:
     tenant = t.register_tenant("Acme")
     key = tenant["api_key"]
 
@@ -48,37 +49,40 @@ def test_business_lifecycle() -> None:
     listed = t.list_businesses(api_key=key)
     assert len(listed) == 1
 
-    run = t.analyze_business(api_key=key, business_id=biz["id"])
+    run = await t.analyze_business(api_key=key, business_id=biz["id"])
     assert run["status"] == "pending"
 
     fetched = t.get_run(api_key=key, run_id=run["id"])
     assert fetched["id"] == run["id"]
 
 
-def test_cross_tenant_business_lookup_404() -> None:
+@pytest.mark.asyncio
+async def test_cross_tenant_business_lookup_404() -> None:
     a = t.register_tenant("A")
     b = t.register_tenant("B")
     biz = t.register_business(api_key=a["api_key"], url="https://a.com")
     with pytest.raises(t.NotFoundError):
-        t.analyze_business(api_key=b["api_key"], business_id=biz["id"])
+        await t.analyze_business(api_key=b["api_key"], business_id=biz["id"])
 
 
-def test_query_knowledge_returns_status_pending() -> None:
+@pytest.mark.asyncio
+async def test_query_knowledge_returns_status_pending() -> None:
     tenant = t.register_tenant("Acme")
     biz = t.register_business(api_key=tenant["api_key"], url="https://acme.com")
-    out = t.query_business_knowledge(
+    out = await t.query_business_knowledge(
         api_key=tenant["api_key"],
         business_id=biz["id"],
         question="What's the positioning?",
     )
-    assert out["status"] == "not_implemented"
+    assert out["status"] == "pending_pipeline"
     assert out["chunks"] == []
 
 
-def test_recommendations_pending_pipeline() -> None:
+@pytest.mark.asyncio
+async def test_recommendations_pending_pipeline() -> None:
     tenant = t.register_tenant("Acme")
     biz = t.register_business(api_key=tenant["api_key"], url="https://acme.com")
-    out = t.get_marketing_recommendations(
+    out = await t.get_marketing_recommendations(
         api_key=tenant["api_key"],
         business_id=biz["id"],
         channel="linkedin",

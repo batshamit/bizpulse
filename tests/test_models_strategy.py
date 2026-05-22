@@ -12,8 +12,8 @@ from bizpulse.models import (
     AudiencePersona,
     BrandAnalysis,
     Citation,
-    Competitor,
     CompetitiveLandscape,
+    Competitor,
     ContentAudit,
     MarketingStrategy,
     Recommendation,
@@ -30,7 +30,7 @@ def test_recommendation_requires_evidence() -> None:
             channel="linkedin",
             action="Post a thought-leadership piece",
             rationale="Audience is on LinkedIn",
-            evidence_chunk_ids=[],   # empty -> reject
+            evidence_chunk_ids=[],  # empty -> reject
             confidence=0.8,
         )
 

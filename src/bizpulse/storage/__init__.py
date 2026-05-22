@@ -12,13 +12,13 @@ swap via env var (`BIZPULSE_STORE=memory|postgres`).
 
 from __future__ import annotations
 
+import contextlib
 import os
-from typing import Protocol, Union
 
 from bizpulse.storage.memory import InMemoryStore
 from bizpulse.storage.postgres import PostgresStore
 
-Store = Union[InMemoryStore, PostgresStore]
+Store = InMemoryStore | PostgresStore
 
 
 _default_store: Store | None = None
@@ -29,10 +29,7 @@ def get_default_store() -> Store:
     if _default_store is not None:
         return _default_store
     backend = os.environ.get("BIZPULSE_STORE", "memory").lower()
-    if backend == "postgres":
-        _default_store = PostgresStore()
-    else:
-        _default_store = InMemoryStore()
+    _default_store = PostgresStore() if backend == "postgres" else InMemoryStore()
     return _default_store
 
 
@@ -50,10 +47,8 @@ def reset_default_store_for_tests() -> None:
     """
     global _default_store
     if _default_store is not None and isinstance(_default_store, PostgresStore):
-        try:
+        with contextlib.suppress(Exception):
             _default_store.close()
-        except Exception:  # noqa: BLE001 — best-effort cleanup
-            pass
     _default_store = None
 
 

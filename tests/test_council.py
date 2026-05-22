@@ -33,7 +33,12 @@ async def test_basic_two_round_debate() -> None:
     a_r2_user = a.calls[1].user
     assert "previous round, peer proposals" in a_r2_user
     assert "proposal-B1" in a_r2_user
-    assert "proposal-A1" not in a_r2_user.split("----- previous round, peer proposals -----")[1].split("----- end peer proposals -----")[0]  # never sees own
+    assert (
+        "proposal-A1"
+        not in a_r2_user.split("----- previous round, peer proposals -----")[1].split(
+            "----- end peer proposals -----"
+        )[0]
+    )  # never sees own
     # Cost is summed across rounds + synthesis.
     assert res.cost_usd > 0
 

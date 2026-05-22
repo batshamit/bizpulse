@@ -8,7 +8,7 @@ from typing import Annotated
 import yaml
 from pydantic import Field, field_validator
 
-from bizpulse.models.common import SUPPORTED_INDUSTRIES, StrictModel
+from bizpulse.models.common import StrictModel
 
 INDUSTRIES_DIR = Path(__file__).resolve().parents[3] / "industries"
 
@@ -37,10 +37,11 @@ class IndustryPack(StrictModel):
 
     @field_validator("slug")
     @classmethod
-    def _slug_supported(cls, v: str) -> str:
-        if v not in SUPPORTED_INDUSTRIES:
-            msg = f"unsupported industry slug {v!r}; expected one of {SUPPORTED_INDUSTRIES}"
-            raise ValueError(msg)
+    def _slug_format(cls, v: str) -> str:
+        import re
+
+        if not re.match(r"^[a-z0-9][a-z0-9_]*$", v):
+            raise ValueError("slug must be lowercase alphanumeric and underscore")
         return v
 
     @field_validator("channel_weights")
@@ -64,4 +65,8 @@ def load_industry(slug: str, root: Path | None = None) -> IndustryPack:
 
 
 def load_all_industries(root: Path | None = None) -> dict[str, IndustryPack]:
-    return {slug: load_industry(slug, root=root) for slug in SUPPORTED_INDUSTRIES}
+    base = root or INDUSTRIES_DIR
+    if not base.is_dir():
+        return {}
+    slugs = [p.stem for p in base.glob("*.yaml") if p.is_file()]
+    return {slug: load_industry(slug, root=root) for slug in sorted(slugs)}

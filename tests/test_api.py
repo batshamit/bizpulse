@@ -55,9 +55,7 @@ def test_tenant_create_and_whoami() -> None:
 def test_whoami_requires_api_key() -> None:
     with TestClient(app) as client:
         assert client.get("/v1/tenants/me").status_code == 401
-        assert client.get(
-            "/v1/tenants/me", headers={"X-API-Key": "bzp_garbage"}
-        ).status_code == 401
+        assert client.get("/v1/tenants/me", headers={"X-API-Key": "bzp_garbage"}).status_code == 401
 
 
 def test_business_lifecycle() -> None:
@@ -120,3 +118,171 @@ def test_cross_tenant_business_access_404() -> None:
             headers={"X-API-Key": b["api_key"]},
         )
         assert r.status_code == 404
+
+
+def test_downloads_and_chat_endpoints() -> None:
+    from unittest.mock import AsyncMock, patch
+    from uuid import UUID, uuid4
+
+    from bizpulse.models import (
+        AudienceAnalysis,
+        AudiencePersona,
+        BrandAnalysis,
+        Citation,
+        CompetitiveLandscape,
+        Competitor,
+        ContentAudit,
+        MarketingStrategy,
+        Recommendation,
+    )
+    from bizpulse.models.compliance import ComplianceFlag, ComplianceReport, LLLLMetric
+    from bizpulse.storage import get_default_store
+
+    with TestClient(app) as client:
+        # Create tenants
+        tenant_a = client.post("/v1/tenants", json={"name": "Tenant A"}).json()
+        tenant_b = client.post("/v1/tenants", json={"name": "Tenant B"}).json()
+
+        headers_a = {"X-API-Key": tenant_a["api_key"]}
+        headers_b = {"X-API-Key": tenant_b["api_key"]}
+
+        # Create business for Tenant A
+        biz = client.post(
+            "/v1/businesses",
+            json={"url": "https://example.com", "industry": "fintech"},
+            headers=headers_a,
+        ).json()
+
+        # Create a run in the store manually so we can set final_output
+        store = get_default_store()
+        run = store.create_run(UUID(tenant_a["id"]), UUID(biz["id"]))
+        run_id = run.id
+
+        # Construct a valid MarketingStrategy
+        cid = uuid4()
+        strategy = MarketingStrategy(
+            tenant_id=UUID(tenant_a["id"]),
+            business_id=UUID(biz["id"]),
+            industry="fintech",
+            brand=BrandAnalysis(
+                positioning="Test positioning",
+                tone="formal",
+                value_props=["quick setup"],
+                citations=[Citation(chunk_id=cid)],
+            ),
+            audience=AudienceAnalysis(
+                primary=AudiencePersona(
+                    name="Test Audience",
+                    description="Standard test persona",
+                    citations=[Citation(chunk_id=cid)],
+                ),
+                citations=[Citation(chunk_id=cid)],
+            ),
+            competitive_landscape=CompetitiveLandscape(
+                competitors=[
+                    Competitor(
+                        name="Comp A",
+                        url="https://compa.com",
+                        positioning="cheap",
+                        verified=True,
+                        citations=[Citation(chunk_id=cid)],
+                    )
+                ],
+                market_position="average",
+                citations=[Citation(chunk_id=cid)],
+            ),
+            content_audit=ContentAudit(),
+            recommendations=[
+                Recommendation(
+                    channel="linkedin",
+                    action="Publish case studies",
+                    rationale="Audience reads case studies",
+                    evidence_chunk_ids=[cid],
+                    confidence=0.9,
+                    priority="P0",
+                )
+            ],
+            inclusivity_metrics=LLLLMetric(
+                last=0.8,
+                least=0.7,
+                lost=0.6,
+                lowest=0.5,
+                narrative="Good test metrics",
+            ),
+            overall_confidence=0.85,
+            summary="A test summary of the marketing strategy.",
+            benefit_report="Benefit of the strategy.",
+            compliance_report=ComplianceReport(
+                country="IN",
+                state="maharashtra",
+                policies_considered=["rera-maharashtra"],
+                flags=[
+                    ComplianceFlag(
+                        policy_slug="rera-maharashtra",
+                        severity="warning",
+                        issue="missing disclosures",
+                        fix="add disclaimer",
+                    )
+                ],
+                metrics=LLLLMetric(
+                    last=0.8,
+                    least=0.7,
+                    lost=0.6,
+                    lowest=0.5,
+                    narrative="Good test metrics",
+                ),
+                overall_compliance_score=0.9,
+                summary="Overall compliant with warning",
+            ),
+        )
+
+        # Complete the run with final output
+        store.update_run_status(run_id, "complete")
+        from bizpulse.api.runner_service import _persist_final_output
+
+        _persist_final_output(store=store, run_id=run_id, strategy=strategy)
+
+        # 1. Test GET /v1/runs/{run_id}/pdf
+        r_pdf = client.get(f"/v1/runs/{run_id}/pdf", headers=headers_a)
+        assert r_pdf.status_code == 200
+
+        assert r_pdf.headers["content-type"] == "application/pdf"
+        assert f"BizPulse_Report_{run_id}.pdf" in r_pdf.headers["content-disposition"]
+        assert len(r_pdf.content) > 0
+
+        # Test cross-tenant access to pdf
+        r_pdf_b = client.get(f"/v1/runs/{run_id}/pdf", headers=headers_b)
+        assert r_pdf_b.status_code == 404
+
+        # 2. Test GET /v1/runs/{run_id}/download (Markdown)
+        r_md = client.get(f"/v1/runs/{run_id}/download", headers=headers_a)
+        assert r_md.status_code == 200
+        assert r_md.headers["content-type"] == "text/markdown; charset=utf-8"
+        assert f"BizPulse_Report_{run_id}.md" in r_md.headers["content-disposition"]
+        assert "# BizPulse Marketing Strategy Report" in r_md.text
+        assert "Inclusivity Scorecard (4 L's)" in r_md.text
+        assert "Compliance Audit" in r_md.text
+
+        # Test cross-tenant access to markdown download
+        r_md_b = client.get(f"/v1/runs/{run_id}/download", headers=headers_b)
+        assert r_md_b.status_code == 404
+
+        # 3. Test POST /v1/runs/{run_id}/chat
+        chat_req = {
+            "recommendation_index": 0,
+            "message": "Can you elaborate on publishing case studies?",
+        }
+
+        with patch(
+            "bizpulse.api.runs.chat_about_recommendation", new_callable=AsyncMock
+        ) as mock_chat:
+            mock_chat.return_value = "This is a detailed mock implementation reply."
+
+            r_chat = client.post(f"/v1/runs/{run_id}/chat", json=chat_req, headers=headers_a)
+            assert r_chat.status_code == 200
+            assert r_chat.json() == {"reply": "This is a detailed mock implementation reply."}
+            mock_chat.assert_called_once()
+
+        # Test cross-tenant access to chat
+        r_chat_b = client.post(f"/v1/runs/{run_id}/chat", json=chat_req, headers=headers_b)
+        assert r_chat_b.status_code == 404

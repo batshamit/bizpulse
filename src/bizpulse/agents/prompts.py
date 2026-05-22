@@ -28,8 +28,7 @@ from bizpulse.models.retrieval import RetrievedChunk
 # specs, not pep talks: state the role, the output contract, the rules. The
 # model knows how to write English; we don't need to remind it.
 
-_BASE_RULES = dedent(
-    """
+_BASE_RULES = dedent("""
     Output rules (non-negotiable):
     - Reply ONLY with valid JSON matching the schema specified in the user
       message. No prose preamble, no trailing commentary.
@@ -42,8 +41,7 @@ _BASE_RULES = dedent(
     - Never invent companies, URLs, regulations, or numbers that aren't in the
       context. The Competitor Scout verifies competitors via web search; if
       you can't, omit the entry.
-    """
-).strip()
+    """).strip()
 
 _AGENT_ROLES: dict[AgentName, str] = {
     "orchestrator": "You orchestrate a multi-agent marketing-strategy pipeline. Your job is to plan which sub-agents to call and in what order, given the input and currently available context.",
@@ -60,6 +58,7 @@ _AGENT_ROLES: dict[AgentName, str] = {
 
 
 # --- builder ---------------------------------------------------------------
+
 
 class PromptBuilder:
     """Build (system, user) prompt pairs for any agent role.

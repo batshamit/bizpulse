@@ -23,9 +23,7 @@ import sys
 try:
     import pyotp  # type: ignore[import-untyped]
 except ImportError:
-    sys.stderr.write(
-        "pyotp not installed. Install with: .venv/bin/pip install pyotp\n"
-    )
+    sys.stderr.write("pyotp not installed. Install with: .venv/bin/pip install pyotp\n")
     sys.exit(2)
 
 
@@ -49,6 +47,7 @@ def main() -> None:
 
     try:
         import qrcode  # type: ignore[import-untyped]
+
         qr = qrcode.QRCode(border=1)
         qr.add_data(uri)
         qr.make(fit=True)
@@ -60,7 +59,9 @@ def main() -> None:
     print()
     print("Next steps:")
     print("  1. Add BIZPULSE_ADMIN_TOTP_SECRET=... to /raid/amit/mylearning/bizpulse/.env")
-    print("  2. Restart FastAPI (tmux kill-window -t bizpulse:api; tmux new-window -t bizpulse -n api ...)")
+    print(
+        "  2. Restart FastAPI (tmux kill-window -t bizpulse:api; tmux new-window -t bizpulse -n api ...)"
+    )
     print("  3. The admin login form will now require a 6-digit TOTP code")
 
 

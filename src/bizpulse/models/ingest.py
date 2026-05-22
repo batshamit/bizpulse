@@ -29,6 +29,7 @@ SourceType = Literal[
     "social_post",
     "screenshot_ocr",
     "competitor_page",
+    "user_context",
 ]
 
 

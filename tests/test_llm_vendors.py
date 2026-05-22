@@ -15,14 +15,14 @@ from pytest_httpx import HTTPXMock
 from bizpulse.llm import LLMError
 from bizpulse.llm.gemini_client import GeminiClient
 from bizpulse.llm.openai_compat import (
-    DeepSeekClient,
-    GrokClient,
-    OpenAIClient,
-    PerplexityClient,
+    deepseek_client,
+    grok_client,
+    openai_client,
+    perplexity_client,
 )
 
-
 # --- mocked OpenAI-compat ----------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_openai_compat_happy_path(httpx_mock: HTTPXMock) -> None:
@@ -31,12 +31,15 @@ async def test_openai_compat_happy_path(httpx_mock: HTTPXMock) -> None:
         json={
             "id": "resp-1",
             "choices": [
-                {"message": {"role": "assistant", "content": "hello world"}, "finish_reason": "stop"}
+                {
+                    "message": {"role": "assistant", "content": "hello world"},
+                    "finish_reason": "stop",
+                }
             ],
             "usage": {"prompt_tokens": 12, "completion_tokens": 3},
         },
     )
-    c = OpenAIClient(api_key="sk-fake", model="gpt-4o")
+    c = openai_client(api_key="sk-fake", model="gpt-4o")
     out = await c.complete(system="sys", user="u")
     assert out.text == "hello world"
     assert out.input_tokens == 12 and out.output_tokens == 3
@@ -51,7 +54,7 @@ async def test_openai_compat_4xx_raises(httpx_mock: HTTPXMock) -> None:
         status_code=400,
         text="bad request",
     )
-    c = OpenAIClient(api_key="sk-fake")
+    c = openai_client(api_key="sk-fake")
     with pytest.raises(LLMError, match="400"):
         await c.complete("sys", "u")
 
@@ -72,7 +75,7 @@ async def test_openai_compat_5xx_retried(httpx_mock: HTTPXMock) -> None:
             "usage": {"prompt_tokens": 5, "completion_tokens": 2},
         },
     )
-    c = OpenAIClient(api_key="sk-fake", max_retries=4)
+    c = openai_client(api_key="sk-fake", max_retries=4)
     out = await c.complete("sys", "u")
     assert out.text == "recovered"
 
@@ -86,7 +89,7 @@ async def test_perplexity_uses_correct_url(httpx_mock: HTTPXMock) -> None:
             "usage": {"prompt_tokens": 1, "completion_tokens": 1},
         },
     )
-    c = PerplexityClient(api_key="pplx-fake")
+    c = perplexity_client(api_key="pplx-fake")
     out = await c.complete("sys", "u")
     assert out.text == "from perplexity"
     assert out.vendor == "perplexity"
@@ -96,19 +99,26 @@ async def test_perplexity_uses_correct_url(httpx_mock: HTTPXMock) -> None:
 async def test_grok_and_deepseek_use_their_urls(httpx_mock: HTTPXMock) -> None:
     httpx_mock.add_response(
         url="https://api.x.ai/v1/chat/completions",
-        json={"choices": [{"message": {"content": "grok!"}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}},
+        json={
+            "choices": [{"message": {"content": "grok!"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+        },
     )
     httpx_mock.add_response(
         url="https://api.deepseek.com/chat/completions",
-        json={"choices": [{"message": {"content": "deepseek!"}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}},
+        json={
+            "choices": [{"message": {"content": "deepseek!"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+        },
     )
-    g = GrokClient(api_key="xai-fake")
-    d = DeepSeekClient(api_key="ds-fake")
+    g = grok_client(api_key="xai-fake")
+    d = deepseek_client(api_key="ds-fake")
     assert (await g.complete("s", "u")).text == "grok!"
     assert (await d.complete("s", "u")).text == "deepseek!"
 
 
 # --- mocked Gemini ----------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_gemini_happy_path(httpx_mock: HTTPXMock) -> None:
@@ -150,13 +160,15 @@ async def test_gemini_missing_key_raises() -> None:
 
 # --- factory --------------------------------------------------------------
 
+
 def test_factory_available_vendors_reflects_env(monkeypatch: pytest.MonkeyPatch) -> None:
     from bizpulse.llm.factory import available_vendors
 
     # Clear all
     for var in (
         "ANTHROPIC_API_KEY",
-        "GOOGLE_API_KEY", "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "GEMINI_API_KEY",
         "OPENAI_API_KEY",
         "PERPLEXITY_API_KEY",
         "XAI_API_KEY",
@@ -164,8 +176,10 @@ def test_factory_available_vendors_reflects_env(monkeypatch: pytest.MonkeyPatch)
         "GROQ_API_KEY",
         "MISTRAL_API_KEY",
         "OPENROUTER_API_KEY",
+        "OLLAMA_API_KEY",
     ):
         monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:8800/v1")
     assert available_vendors() == []
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
@@ -176,9 +190,11 @@ def test_factory_available_vendors_reflects_env(monkeypatch: pytest.MonkeyPatch)
 
 def test_factory_build_council_raises_with_no_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     from bizpulse.llm.factory import build_council
+
     for var in (
         "ANTHROPIC_API_KEY",
-        "GOOGLE_API_KEY", "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "GEMINI_API_KEY",
         "OPENAI_API_KEY",
         "PERPLEXITY_API_KEY",
         "XAI_API_KEY",
@@ -186,7 +202,9 @@ def test_factory_build_council_raises_with_no_keys(monkeypatch: pytest.MonkeyPat
         "GROQ_API_KEY",
         "MISTRAL_API_KEY",
         "OPENROUTER_API_KEY",
+        "OLLAMA_API_KEY",
     ):
         monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:8800/v1")
     with pytest.raises(RuntimeError, match="No LLM API keys"):
         build_council()

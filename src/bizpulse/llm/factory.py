@@ -12,10 +12,27 @@ few as one member.
 from __future__ import annotations
 
 import os
-from typing import Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from bizpulse.agents.council import Council
 from bizpulse.llm.base import LLMClient
+
+
+def ollama_chat_client(model: str | None = None, **kw: Any) -> LLMClient:
+    """Ollama — local inference via /v1 OpenAI-compatible endpoint."""
+    from bizpulse.config import settings
+    from bizpulse.llm.openai_compat import OpenAICompatClient
+
+    return OpenAICompatClient(
+        vendor="ollama",
+        model=model or settings.llm_model,
+        base_url=settings.llm_base_url,
+        api_key_env="OLLAMA_API_KEY",
+        api_key="EMPTY",
+        **kw,
+    )
+
 
 # Module-level imports of vendor adapters are deferred until needed so
 # missing optional deps don't break the package import.
@@ -26,6 +43,7 @@ def _try_anthropic(model: str | None = None) -> LLMClient | None:
         return None
     try:
         from bizpulse.llm.anthropic_client import AnthropicClient
+
         return AnthropicClient(model=model or "claude-sonnet-4-6")
     except Exception:
         return None
@@ -40,6 +58,7 @@ def _try_openai_compat(
         return None
     try:
         from bizpulse.llm import openai_compat as oc
+
         factory = getattr(oc, factory_name)
         return factory(model=default_model) if default_model else factory()
     except Exception:
@@ -51,31 +70,39 @@ def _try_gemini(model: str | None = None) -> LLMClient | None:
         return None
     try:
         from bizpulse.llm.gemini_client import GeminiClient
+
         return GeminiClient(model=model or "gemini-2.5-pro")
     except Exception:
         return None
 
 
+def _try_ollama(model: str | None = None) -> LLMClient | None:
+    from bizpulse.config import settings
+
+    url = os.environ.get("LLM_BASE_URL", settings.llm_base_url)
+    if "11434" in url or "ollama" in url.lower() or os.environ.get("OLLAMA_API_KEY"):
+        return ollama_chat_client(model=model)
+    return None
+
+
 # Vendor → builder. Order matters: this is the default convening order.
-VENDOR_BUILDERS: dict[str, callable] = {
-    "anthropic":  _try_anthropic,
-    "google":     _try_gemini,
-    "openai":     lambda: _try_openai_compat("OpenAIClient", "OPENAI_API_KEY"),
-    "perplexity": lambda: _try_openai_compat("PerplexityClient", "PERPLEXITY_API_KEY"),
-    "xai":        lambda: _try_openai_compat("GrokClient", "XAI_API_KEY"),
-    "deepseek":   lambda: _try_openai_compat("DeepSeekClient", "DEEPSEEK_API_KEY"),
-    "groq":       lambda: _try_openai_compat("GroqClient", "GROQ_API_KEY"),
-    "openrouter": lambda: _try_openai_compat("OpenRouterClient", "OPENROUTER_API_KEY"),
-    "mistral":    lambda: _try_openai_compat("MistralClient", "MISTRAL_API_KEY"),
+VENDOR_BUILDERS: dict[str, Callable[[], LLMClient | None]] = {
+    "ollama": _try_ollama,
+    "anthropic": _try_anthropic,
+    "google": _try_gemini,
+    "openai": lambda: _try_openai_compat("openai_client", "OPENAI_API_KEY"),
+    "perplexity": lambda: _try_openai_compat("perplexity_client", "PERPLEXITY_API_KEY"),
+    "xai": lambda: _try_openai_compat("grok_client", "XAI_API_KEY"),
+    "deepseek": lambda: _try_openai_compat("deepseek_client", "DEEPSEEK_API_KEY"),
+    "groq": lambda: _try_openai_compat("groq_client", "GROQ_API_KEY"),
+    "openrouter": lambda: _try_openai_compat("openrouter_client", "OPENROUTER_API_KEY"),
+    "mistral": lambda: _try_openai_compat("mistral_client", "MISTRAL_API_KEY"),
 }
 
 
 def available_vendors() -> list[str]:
     """Vendors whose API key is currently set."""
-    return [
-        v for v, builder in VENDOR_BUILDERS.items()
-        if builder() is not None
-    ]
+    return [v for v, builder in VENDOR_BUILDERS.items() if builder() is not None]
 
 
 def build_clients(prefer: Sequence[str] | None = None) -> list[LLMClient]:
@@ -94,9 +121,9 @@ def build_clients(prefer: Sequence[str] | None = None) -> list[LLMClient]:
 
 def build_council(
     *,
-    judge_preference: Sequence[str] = ("anthropic", "google", "openai"),
+    judge_preference: Sequence[str] = ("ollama", "anthropic", "google", "openai"),
     rounds: int = 2,
-    fallback_judge_preference: Sequence[str] = ("openai", "google", "anthropic"),
+    fallback_judge_preference: Sequence[str] = ("openai", "google", "anthropic", "ollama"),
 ) -> Council:
     """Build a Council from whatever vendors have keys.
 

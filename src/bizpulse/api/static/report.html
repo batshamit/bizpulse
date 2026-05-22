@@ -20,6 +20,7 @@
       <a href="/ui/dashboard.html">Dashboard</a>
       <a href="/ui/new-report.html">New report</a>
       <a href="/ui/history.html">History</a>
+      <a href="/ui/about.html">About</a>
       <span x-show="tenant" style="color:var(--bzp-ink-faint); margin-left:1.5rem; font-size:0.85rem;" x-text="tenant?.name"></span>
       <a href="#" @click.prevent="logout()" style="margin-left:0.8rem; color:var(--bzp-ink-soft);">Sign out</a>
     </div>
@@ -40,10 +41,22 @@
 
   <template x-if="!busy && run">
     <div>
-      <h1 class="bzp-page-title">Analysis report</h1>
-      <div class="bzp-page-subtitle">
-        <span x-text="business?.url || ''"></span>
-        <template x-if="business?.industry"> · <span x-text="business.industry"></span></template>
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:1rem;">
+        <div>
+          <h1 class="bzp-page-title">Analysis report</h1>
+          <div class="bzp-page-subtitle">
+            <span x-text="business?.url || ''"></span>
+            <template x-if="business?.industry"> · <span x-text="business.industry"></span></template>
+          </div>
+        </div>
+        <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
+          <button @click="downloadPdf()" class="bzp-btn bzp-btn-primary" :disabled="!run?.final_output">
+            📄 Download PDF
+          </button>
+          <button @click="downloadReport()" class="bzp-btn bzp-btn-ghost" :disabled="!run?.final_output">
+            📥 Markdown
+          </button>
+        </div>
       </div>
 
       <div class="bzp-grid-stats">
@@ -58,6 +71,10 @@
         <div class="bzp-stat">
           <div class="bzp-stat-label">Finished</div>
           <div class="bzp-stat-value" style="font-size:1.1rem;" x-text="fmtTime(run.finished_at) || '—'"></div>
+        </div>
+        <div class="bzp-stat">
+          <div class="bzp-stat-label">Report Cost</div>
+          <div class="bzp-stat-value" style="font-size:1.1rem;" x-text="fmtCurrency(run.total_cost_usd)"></div>
         </div>
         <div class="bzp-stat">
           <div class="bzp-stat-label">Run id</div>
@@ -94,9 +111,6 @@
                   </button>
                   <a href="/ui/new-report.html" class="bzp-btn bzp-btn-ghost">New report</a>
                 </div>
-                <div style="font-size:0.8rem; color:var(--bzp-ink-faint); margin-top:0.7rem;">
-                  Retry uses the same business URL. Use "New report" to change the URL or jurisdiction.
-                </div>
               </div>
             </template>
             <template x-if="run.status !== 'failed'">
@@ -114,18 +128,30 @@
             <h2>Executive summary</h2>
             <p x-text="run.final_output.summary" style="line-height:1.65; color:var(--bzp-ink-soft); margin:1rem 0;"></p>
 
-            <hr class="bzp-divider">
+            <div x-show="run.final_output.inclusivity_metrics" style="margin-top:2rem;">
+              <h3>Inclusivity Scorecard (4 L's)</h3>
+              <div class="bzp-llll-grid" style="margin-top:1rem;">
+                <template x-for="key in [['last','LAST customer'], ['least','LEAST-considered'], ['lost','LOST customers'], ['lowest','LOWEST budget']]" :key="key[0]">
+                  <div class="bzp-llll-card" style="padding:0.6rem 0.8rem;">
+                    <div class="bzp-llll-name" style="font-size:0.75rem;" x-text="key[1]"></div>
+                    <div class="bzp-llll-value" style="font-size:1.1rem; margin-top:0.2rem;" x-text="((run.final_output.inclusivity_metrics[key[0]] || 0)*100).toFixed(0) + '%'"></div>
+                    <div class="bzp-llll-bar"><span :style="`width: ${(run.final_output.inclusivity_metrics[key[0]] || 0)*100}%`"></span ></div>
+                  </div>
+                </template>
+              </div>
+              <p x-text="run.final_output.inclusivity_metrics?.narrative" style="font-size:0.88rem; color:var(--bzp-ink-soft); font-style:italic; margin-top:0.8rem;"></p>
+            </div>
 
-            <h3>Brand positioning</h3>
-            <p x-text="run.final_output.brand?.positioning" style="line-height:1.55; margin:0.5rem 0 1rem;"></p>
+            <hr class="bzp-divider">
 
             <h3>Recommendations</h3>
             <template x-for="(r, i) in (run.final_output.recommendations || [])" :key="i">
+              <!-- ... recommendation card (unchanged) ... -->
               <div style="border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:1rem 1.2rem; margin:0.8rem 0;">
                 <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:0.5rem;">
                   <span class="bzp-pill bzp-pill-accent" x-text="r.priority"></span>
                   <span class="bzp-pill bzp-pill-neutral" x-text="r.channel"></span>
-                  <span style="color:var(--bzp-ink-faint); font-size:0.78rem;" x-text="`conf ${(r.confidence*100).toFixed(0)}%`"></span>
+                  <span style="color:var(--bzp-ink-faint); font-size:0.78rem;" x-text="`conf ${(r.confidence*100).toFixed(0)}%`"></span >
                 </div>
                 <div style="font-weight:500; margin-bottom:0.4rem;" x-text="r.action"></div>
                 <div style="color:var(--bzp-ink-soft); font-size:0.9rem;" x-text="r.rationale"></div>
@@ -134,8 +160,82 @@
                     <span class="bzp-pill bzp-pill-warning" style="margin-right:0.3rem;" x-text="f"></span>
                   </template>
                 </div>
+
+                <!-- Chat section -->
+                <div style="margin-top:1rem; border-top:1px solid var(--bzp-border); padding-top:0.8rem;"
+                     x-data="{ 
+                       open: false, msg: '', reply: '', busy: false,
+                       async chat() {
+                         this.busy = true;
+                         try {
+                           const res = await bzpFetch(`/v1/runs/${run.id}/chat`, {
+                             method: 'POST',
+                             body: JSON.stringify({ recommendation_index: i, message: this.msg })
+                           });
+                           this.reply = res.reply;
+                           this.msg = '';
+                         } catch (e) { bzpToast(e.message); }
+                         finally { this.busy = false; }
+                       }
+                     }">
+                  <button @click="open = !open" class="bzp-btn bzp-btn-ghost" style="font-size:0.8rem; padding:0.3rem 0.6rem;">
+                    <span x-show="!open">💬 Chat about implementation</span>
+                    <span x-show="open">Close chat</span>
+                  </button>
+                  <div x-show="open" style="margin-top:0.8rem;">
+                    <template x-if="reply">
+                       <div style="background:var(--bzp-cream); padding:0.8rem; border-radius:var(--bzp-radius); margin-bottom:0.8rem; font-size:0.9rem; border:1px solid var(--bzp-border); white-space:pre-wrap;" x-text="reply"></div>
+                    </template>
+                    <div style="display:flex; gap:0.5rem;">
+                      <input x-model="msg" placeholder="Ask a question..." class="bzp-input" style="flex:1; font-size:0.85rem;" @keyup.enter="chat()">
+                      <button @click="chat()" :disabled="busy || !msg.trim()" class="bzp-btn bzp-btn-primary" style="font-size:0.85rem;">
+                        <span x-show="!busy">Send</span>
+                        <span x-show="busy">...</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </template>
+
+            <div x-show="run.final_output.detailed_channel_strategies?.length" style="margin-top:2rem;">
+              <hr class="bzp-divider">
+              <h3>Detailed Channel Strategies</h3>
+              <template x-for="ds in run.final_output.detailed_channel_strategies" :key="ds.channel">
+                <div style="margin:1rem 0; padding-bottom:1rem; border-bottom:1px solid var(--bzp-border-faint);">
+                  <div style="font-weight:600; font-size:1.05rem; margin-bottom:0.4rem;" x-text="ds.channel.toUpperCase().replace('_', ' ')"></div>
+                  <div style="line-height:1.6; color:var(--bzp-ink-soft); font-size:0.95rem; white-space:pre-wrap;" x-text="ds.strategy_details"></div>
+                  <div x-show="ds.key_metrics?.length" style="margin-top:0.6rem;">
+                    <span style="font-size:0.8rem; font-weight:500; color:var(--bzp-ink-faint);">Key Metrics:</span>
+                    <template x-for="m in ds.key_metrics" :key="m">
+                      <span class="bzp-pill bzp-pill-neutral" style="margin-left:0.3rem;" x-text="m"></span>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+
+            <div x-show="run.final_output.benefit_report" style="margin-top:2rem; background:var(--bzp-accent-soft); padding:1.2rem; border-radius:var(--bzp-radius);">
+              <h3 style="color:var(--bzp-accent); margin-top:0;">Business Benefit Report</h3>
+              <p x-text="run.final_output.benefit_report" style="line-height:1.65; color:var(--bzp-ink-soft); margin:0.5rem 0 0; white-space:pre-wrap;"></p>
+            </div>
+
+            <div x-show="run.final_output.competitive_landscape?.competitors?.length" style="margin-top:2rem;">
+              <hr class="bzp-divider">
+              <h3>Competitive Intel</h3>
+              <template x-for="c in run.final_output.competitive_landscape.competitors" :key="c.name">
+                <div style="margin:0.8rem 0; font-size:0.9rem;">
+                  <strong x-text="c.name"></strong> · <a :href="c.url" target="_blank" style="color:var(--bzp-accent);" x-text="c.url"></a>
+                  <div x-show="c.linkedin_url" style="margin-top:0.2rem;">
+                    <a :href="c.linkedin_url" target="_blank" style="color:var(--bzp-ink-soft); font-size:0.8rem; display:inline-flex; align-items:center; gap:0.3rem;">
+                      <svg style="width:14px; height:14px;" viewBox="0 0 24 24"><path fill="currentColor" d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg>
+                      LinkedIn Company Page
+                    </a>
+                  </div>
+                </div>
+              </template>
+            </div>
+
           </div>
         </template>
       </div>
@@ -165,7 +265,7 @@
                   <div class="bzp-llll-letter" x-text="key[0].charAt(0).toUpperCase()"></div>
                   <div class="bzp-llll-name" x-text="key[1]"></div>
                   <div class="bzp-llll-value" x-text="((run.final_output.compliance_report.metrics[key[0]] || 0)*100).toFixed(0) + '%'"></div>
-                  <div class="bzp-llll-bar"><span :style="`width: ${(run.final_output.compliance_report.metrics[key[0]] || 0)*100}%`"></span></div>
+                  <div class="bzp-llll-bar"><span :style="`width: ${(run.final_output.compliance_report.metrics[key[0]] || 0)*100}%`"></span ></div>
                   <div style="font-size:0.65rem; color:var(--bzp-ink-faint); margin-top:0.3rem;" x-text="key[2]"></div>
                 </div>
               </template>
@@ -177,7 +277,7 @@
             <template x-for="f in run.final_output.compliance_report.flags" :key="f.policy_slug + f.issue">
               <div style="border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:1rem 1.2rem; margin:0.8rem 0;">
                 <div>
-                  <span class="bzp-pill" :class="`bzp-pill-${f.severity === 'critical' || f.severity === 'violation' ? 'danger' : (f.severity === 'warning' ? 'warning' : 'neutral')}`" x-text="f.severity"></span>
+                  <span class="bzp-pill" :class="`bzp-pill-${f.severity === 'critical' || f.severity === 'violation' ? 'danger' : (f.severity === 'warning' ? 'warning' : 'neutral')}`" x-text="f.severity"></span >
                   <span style="color:var(--bzp-ink-soft); font-family:monospace; font-size:0.8rem; margin-left:0.4rem;" x-text="f.policy_slug"></span>
                 </div>
                 <div style="margin:0.6rem 0;" x-text="f.issue"></div>
@@ -204,8 +304,8 @@
             <div style="border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:0.9rem 1.1rem; margin:0.6rem 0;">
               <div style="display:flex; gap:0.5rem; align-items:center;">
                 <strong x-text="t.agent" style="font-family:'JetBrains Mono', monospace; font-size:0.9rem;"></strong>
-                <span class="bzp-pill" :class="`bzp-pill-${t.status === 'ok' ? 'success' : (t.status === 'retry' ? 'warning' : 'danger')}`" x-text="t.status"></span>
-                <span x-show="t.retries > 0" class="bzp-pill bzp-pill-warning" x-text="`${t.retries} retr${t.retries===1?'y':'ies'}`"></span>
+                <span class="bzp-pill" :class="`bzp-pill-${t.status === 'ok' ? 'success' : (t.status === 'retry' ? 'warning' : 'danger')}`" x-text="t.status"></span >
+                <span x-show="t.retries > 0" class="bzp-pill bzp-pill-warning" x-text="`${t.retries} retr${t.retries===1?'y':'ies'}`"></span >
               </div>
               <div style="font-size:0.78rem; color:var(--bzp-ink-faint); margin-top:0.4rem;">
                 <span x-text="t.started_at ? fmtTime(t.started_at) : ''"></span>

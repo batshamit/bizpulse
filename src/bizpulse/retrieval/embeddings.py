@@ -21,6 +21,7 @@ from tenacity import (
 )
 
 from bizpulse.config import settings
+from bizpulse.llm.ollama_client import OllamaClient
 from bizpulse.logging import get_logger
 
 log = get_logger(__name__)
@@ -62,7 +63,10 @@ class TEIEmbedder:
 
     async def health(self) -> bool:
         try:
-            r = await self._http().get(f"{self.base_url}/health")
+            path = "/health"
+            if "11434" in self.base_url or "ollama" in self.base_url.lower():
+                path = "/"
+            r = await self._http().get(f"{self.base_url}{path}")
             return r.status_code == 200
         except httpx.HTTPError:
             return False
@@ -75,9 +79,7 @@ class TEIEmbedder:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(self._max_retries),
             wait=wait_exponential(multiplier=0.5, max=4.0),
-            retry=retry_if_exception_type(
-                (httpx.TransportError, httpx.HTTPStatusError)
-            ),
+            retry=retry_if_exception_type((httpx.TransportError, httpx.HTTPStatusError)),
             reraise=True,
         ):
             with attempt:
@@ -88,9 +90,7 @@ class TEIEmbedder:
                 if r.status_code >= 500:
                     r.raise_for_status()
                 if r.status_code >= 400:
-                    raise TEIError(
-                        f"TEI {r.status_code} on /embed: {r.text[:300]}"
-                    )
+                    raise TEIError(f"TEI {r.status_code} on /embed: {r.text[:300]}")
                 return r.json()
         raise TEIError("TEI embed retries exhausted")  # pragma: no cover
 
@@ -127,31 +127,64 @@ class TEIReranker(TEIEmbedder):
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(self._max_retries),
             wait=wait_exponential(multiplier=0.5, max=4.0),
-            retry=retry_if_exception_type(
-                (httpx.TransportError, httpx.HTTPStatusError)
-            ),
+            retry=retry_if_exception_type((httpx.TransportError, httpx.HTTPStatusError)),
             reraise=True,
         ):
             with attempt:
                 payload: dict[str, Any] = {"query": query, "texts": texts}
                 if top_n is not None:
                     payload["top_n"] = top_n
-                r = await self._http().post(
-                    f"{self.base_url}/rerank", json=payload
-                )
+                r = await self._http().post(f"{self.base_url}/rerank", json=payload)
                 if r.status_code >= 500:
                     r.raise_for_status()
                 if r.status_code >= 400:
-                    raise TEIError(
-                        f"TEI {r.status_code} on /rerank: {r.text[:300]}"
-                    )
+                    raise TEIError(f"TEI {r.status_code} on /rerank: {r.text[:300]}")
                 # TEI returns: [{"index": i, "score": s}, ...] sorted desc
                 data = r.json()
                 return [(item["index"], item["score"]) for item in data]
         raise TEIError("TEI rerank retries exhausted")  # pragma: no cover
 
 
+class OllamaEmbeddings:
+    """Async client for Ollama's embedding API.
+
+    Typical use:
+        async with OllamaEmbeddings() as embed:
+            vectors = await embed.embed(["text 1", "text 2"])
+    """
+
+    def __init__(
+        self,
+        base_url: str | None = None,
+        model: str | None = None,
+        timeout: float = 30.0,
+        max_retries: int = 3,
+    ) -> None:
+        self.base_url = (base_url or settings.embed_base_url).rstrip("/")
+        self.model = model or settings.embed_model
+        self._client = OllamaClient(
+            base_url=self.base_url,
+            model=self.model,
+            timeout=timeout,
+            max_retries=max_retries,
+        )
+
+    async def __aenter__(self) -> OllamaEmbeddings:
+        await self._client.__aenter__()
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        await self._client.__aexit__(*exc)
+
+    async def health(self) -> bool:
+        return await self._client.health()
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        return await self._client.embed(texts)
+
+
 # --- Gemini embedder ------------------------------------------------------
+
 
 class GeminiEmbedder:
     """Async embedder using Google AI Studio's `gemini-embedding-001`.
@@ -180,9 +213,7 @@ class GeminiEmbedder:
     ) -> None:
         key = api_key or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
         if not key:
-            raise RuntimeError(
-                "GeminiEmbedder needs GOOGLE_API_KEY (or GEMINI_API_KEY) in env"
-            )
+            raise RuntimeError("GeminiEmbedder needs GOOGLE_API_KEY (or GEMINI_API_KEY) in env")
         if output_dim not in (768, 1536, 3072):
             raise ValueError(
                 f"output_dim must be 768, 1536, or 3072 (Matryoshka tiers); got {output_dim}"
@@ -233,9 +264,7 @@ class GeminiEmbedder:
                 if r.status_code == 429 or 500 <= r.status_code < 600:
                     r.raise_for_status()
                 if r.status_code >= 400:
-                    raise TEIError(
-                        f"gemini embeddings {r.status_code}: {r.text[:200]}"
-                    )
+                    raise TEIError(f"gemini embeddings {r.status_code}: {r.text[:200]}")
                 data = r.json()
                 return [e["values"] for e in data.get("embeddings", [])]
         raise TEIError("Gemini embed retries exhausted")  # pragma: no cover

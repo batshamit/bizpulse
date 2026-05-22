@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -17,11 +16,10 @@ from bizpulse.models import (
     RetrievalQuery,
 )
 from bizpulse.retrieval import TEIError, TenantQdrant
-from bizpulse.retrieval.embeddings import TEIEmbedder, TEIReranker
 from bizpulse.retrieval.search import RetrievalEngine
 
-
 # --- fakes -------------------------------------------------------------------
+
 
 class FakeEmbedder:
     embed_dim = 4
@@ -46,7 +44,9 @@ class FakeReranker:
         self.ordering = ordering
         self.scores = scores or [1.0 - 0.1 * i for i in range(len(ordering))]
 
-    async def rerank(self, query: str, texts: list[str], top_n: int | None = None) -> list[tuple[int, float]]:
+    async def rerank(
+        self, query: str, texts: list[str], top_n: int | None = None
+    ) -> list[tuple[int, float]]:
         pairs = [(i, s) for i, s in zip(self.ordering, self.scores, strict=True)]
         if top_n is not None:
             pairs = pairs[:top_n]
@@ -54,11 +54,14 @@ class FakeReranker:
 
 
 class BrokenReranker:
-    async def rerank(self, query: str, texts: list[str], top_n: int | None = None) -> list[tuple[int, float]]:
+    async def rerank(
+        self, query: str, texts: list[str], top_n: int | None = None
+    ) -> list[tuple[int, float]]:
         raise TEIError("simulated reranker outage")
 
 
 # --- fixtures ----------------------------------------------------------------
+
 
 @pytest.fixture
 def repo_with_chunks(tmp_path: Path) -> TenantQdrant:
@@ -95,10 +98,13 @@ def repo_with_chunks(tmp_path: Path) -> TenantQdrant:
 
 # --- tests -------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_search_dense_only(repo_with_chunks: TenantQdrant) -> None:
     eng = RetrievalEngine(repo_with_chunks, embedder=FakeEmbedder())
-    q = RetrievalQuery(text="alpha-text", tenant_id=repo_with_chunks.tenant_id, top_k=3, rerank=False)
+    q = RetrievalQuery(
+        text="alpha-text", tenant_id=repo_with_chunks.tenant_id, top_k=3, rerank=False
+    )
     res = await eng.search(q)
     assert res.method == "dense"
     assert len(res.chunks) == 3

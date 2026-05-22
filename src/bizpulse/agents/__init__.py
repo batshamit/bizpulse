@@ -25,7 +25,7 @@ __all__ = [
     "Council",
     "CouncilError",
     "CouncilResult",
-    "ProposalRecord",
     "PromptBuilder",
+    "ProposalRecord",
     "extract_json",
 ]

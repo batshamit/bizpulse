@@ -61,10 +61,14 @@ def get_business(
 
 
 class AnalyzeRequest(BaseModel):
-    """Optional jurisdiction override for the run."""
+    """Optional jurisdiction override and additional context for the run."""
 
     country: str = Field(default="IN", min_length=2, max_length=3)
     state: str | None = Field(default=None, max_length=64)
+    additional_context: str | None = Field(default=None, max_length=10000)
+    num_llms: int | None = Field(
+        default=None, ge=1, le=5, description="Number of LLMs to include in the Council debate."
+    )
 
 
 @router.post(
@@ -91,14 +95,18 @@ def analyze(
     if biz is None or biz.tenant_id != tenant.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
     run = store.create_run(tenant.id, business_id)
-    country = (body.country if body else "IN")
-    state = (body.state if body else None)
+    country = body.country if body else "IN"
+    state = body.state if body else None
+    context = body.additional_context if body else None
+    num_llms = body.num_llms if body else None
     bg.add_task(
         run_analysis_background,
         run_id=run.id,
         business=biz,
         country=country,
         state=state,
+        additional_context=context,
+        num_llms=num_llms,
     )
     return run
 

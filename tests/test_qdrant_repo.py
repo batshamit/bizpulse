@@ -27,7 +27,9 @@ def repo(tmp_path: Path) -> TenantQdrant:
     repo.close()
 
 
-def _embedded(repo: TenantQdrant, text: str, vec: list[float], industry: str = "fintech") -> EmbeddedChunk:
+def _embedded(
+    repo: TenantQdrant, text: str, vec: list[float], industry: str = "fintech"
+) -> EmbeddedChunk:
     meta = ChunkMetadata(
         tenant_id=repo.tenant_id,
         business_id=uuid4(),
@@ -46,7 +48,7 @@ def _embedded(repo: TenantQdrant, text: str, vec: list[float], industry: str = "
 
 def test_upsert_and_search_roundtrip(repo: TenantQdrant) -> None:
     a = _embedded(repo, "alpha", [1.0, 0.0, 0.0, 0.0])
-    b = _embedded(repo, "beta",  [0.0, 1.0, 0.0, 0.0])
+    b = _embedded(repo, "beta", [0.0, 1.0, 0.0, 0.0])
     repo.upsert([a, b])
 
     hits = repo.search([1.0, 0.0, 0.0, 0.0], top_k=2)
@@ -85,7 +87,7 @@ def test_search_returns_only_this_tenant(tmp_path: Path) -> None:
     b.ensure_collection(vector_size=4)
 
     a.upsert([_embedded(a, "alpha-secret", [1.0, 0.0, 0.0, 0.0])])
-    b.upsert([_embedded(b, "beta-secret",  [1.0, 0.0, 0.0, 0.0])])
+    b.upsert([_embedded(b, "beta-secret", [1.0, 0.0, 0.0, 0.0])])
 
     a_hits = a.search([1.0, 0.0, 0.0, 0.0], top_k=10)
     assert all(h.chunk.text == "alpha-secret" for h in a_hits)
@@ -97,10 +99,12 @@ def test_search_returns_only_this_tenant(tmp_path: Path) -> None:
 
 
 def test_industry_filter(repo: TenantQdrant) -> None:
-    repo.upsert([
-        _embedded(repo, "fin-1", [1.0, 0.0, 0.0, 0.0], industry="fintech"),
-        _embedded(repo, "re-1",  [1.0, 0.0, 0.0, 0.0], industry="real_estate"),
-    ])
+    repo.upsert(
+        [
+            _embedded(repo, "fin-1", [1.0, 0.0, 0.0, 0.0], industry="fintech"),
+            _embedded(repo, "re-1", [1.0, 0.0, 0.0, 0.0], industry="real_estate"),
+        ]
+    )
     hits = repo.search([1.0, 0.0, 0.0, 0.0], top_k=10, industry="fintech")
     assert all(h.chunk.metadata.industry == "fintech" for h in hits)
     assert any(h.chunk.text == "fin-1" for h in hits)

@@ -11,6 +11,7 @@
 set -euo pipefail
 
 API="${API:-http://127.0.0.1:8080}"
+SIGNUP_CODE="${BIZPULSE_SIGNUP_CODE:-bzp-demo-2026}"
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 dim()  { printf '\033[2m%s\033[0m\n' "$*"; }
@@ -42,6 +43,7 @@ echo
 bold "1) Create a tenant (POST /v1/tenants)"
 TENANT_BODY="$(curl -fsS -X POST "${API}/v1/tenants" \
   -H 'Content-Type: application/json' \
+  -H "X-Signup-Code: $SIGNUP_CODE" \
   -d "{\"name\":\"Demo $(date +%s)\"}")"
 echo "$TENANT_BODY"
 API_KEY="$(echo "$TENANT_BODY" | parse api_key)"
@@ -83,7 +85,9 @@ echo
 echo
 bold "6) Cross-tenant isolation (a fresh tenant must NOT see this business)"
 OTHER_KEY="$(curl -fsS -X POST "${API}/v1/tenants" \
-  -H 'Content-Type: application/json' -d '{"name":"Other"}' | parse api_key)"
+  -H 'Content-Type: application/json' \
+  -H "X-Signup-Code: $SIGNUP_CODE" \
+  -d '{"name":"Other"}' | parse api_key)"
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
   "${API}/v1/businesses/${BIZ_ID}" -H "X-API-Key: $OTHER_KEY")
 if [[ "$STATUS" == "404" ]]; then

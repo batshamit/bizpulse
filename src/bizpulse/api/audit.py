@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Query, Request
+from fastapi import APIRouter, Depends, Query
 
 from bizpulse.api.admin import require_admin
 from bizpulse.api.dependencies import get_store
@@ -39,7 +39,7 @@ def record_audit(
             details=details or {},
             request_ip=request_ip,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning(
             "audit.write_failed",
             action=action,

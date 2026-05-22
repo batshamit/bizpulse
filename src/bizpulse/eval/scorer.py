@@ -18,7 +18,7 @@ class TaskScore(BaseModel):
 
     task_id: str
     agent: str
-    schema_valid: bool = True   # if we got an AgentRunResult, schema validated
+    schema_valid: bool = True  # if we got an AgentRunResult, schema validated
     repair_attempted: bool
     citation_count: int
     citations_meet_min: bool
@@ -59,6 +59,7 @@ class ScoreFailure(BaseModel):
 
 
 # ---------- helpers --------------------------------------------------------
+
 
 def _walk(obj: Any) -> Any:
     """Yield every value in a nested dict/list."""
@@ -108,6 +109,7 @@ def extract_confidence(output: BaseModel) -> float | None:
 
 
 # ---------- main entry point ---------------------------------------------
+
 
 def score_task(
     *,

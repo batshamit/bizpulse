@@ -16,13 +16,13 @@ from __future__ import annotations
 
 import importlib
 import time
-from typing import Callable, Mapping
+from collections.abc import Callable
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
 from bizpulse.agents import AgentRunError, AgentRunner, Council
-from bizpulse.eval.golden import GoldenExample, GoldenTask
+from bizpulse.eval.golden import GoldenExample
 from bizpulse.eval.llm_judge import JudgeRubric, llm_judge_score
 from bizpulse.eval.scorer import ScoreFailure, TaskScore, score_task
 from bizpulse.ingest.pipeline import EmbedderProtocol, IngestionPipeline
@@ -106,12 +106,14 @@ class EvalRunner:
                     query_text=task.query_text,
                 )
             except AgentRunError as exc:
-                scores.append(ScoreFailure(
-                    task_id=task.id,
-                    agent=task.agent,
-                    error=str(exc),
-                    raw_text=exc.raw_text[:1000],
-                ))
+                scores.append(
+                    ScoreFailure(
+                        task_id=task.id,
+                        agent=task.agent,
+                        error=str(exc),
+                        raw_text=exc.raw_text[:1000],
+                    )
+                )
                 continue
 
             ts = score_task(task_id=task.id, result=result, expected=task.expected)
@@ -126,7 +128,7 @@ class EvalRunner:
                         agent_output_json=result.output.model_dump_json(),
                     )
                     ts = ts.model_copy(update={"judge_score": rubric.avg_unit})
-                except Exception as exc:  # noqa: BLE001 - judge is advisory
+                except Exception as exc:
                     log.warning("eval.judge_failed", task_id=task.id, error=str(exc)[:200])
 
             scores.append(ts)
@@ -150,6 +152,7 @@ class EvalRunner:
 
 
 # ---- helpers --------------------------------------------------------------
+
 
 def _golden_to_artifact(golden: GoldenExample, tenant_id, business_id) -> RawArtifact:
     """Glue all chunk texts together as one artifact text. The chunker will

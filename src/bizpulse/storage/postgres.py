@@ -20,8 +20,8 @@ from __future__ import annotations
 
 import os
 import secrets
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Iterable
 from uuid import UUID, uuid4
 
 from psycopg_pool import ConnectionPool
@@ -99,19 +99,23 @@ class PostgresStore:
         sets: list[str] = []
         args: list[object] = []
         if name is not None:
-            sets.append("name = %s"); args.append(name)
+            sets.append("name = %s")
+            args.append(name)
         if clear_daily_limit_override:
             sets.append("daily_limit_override = NULL")
         elif daily_limit_override is not None:
-            sets.append("daily_limit_override = %s"); args.append(daily_limit_override)
+            sets.append("daily_limit_override = %s")
+            args.append(daily_limit_override)
         if suspended is not None:
-            sets.append("suspended = %s"); args.append(suspended)
+            sets.append("suspended = %s")
+            args.append(suspended)
             if suspended:
                 sets.append("suspended_at = now()")
             else:
                 sets.append("suspended_at = NULL")
         if notes is not None:
-            sets.append("notes = %s"); args.append(notes)
+            sets.append("notes = %s")
+            args.append(notes)
 
         if not sets:
             return self.get_tenant(tenant_id)
@@ -295,8 +299,7 @@ class PostgresStore:
         # pattern in Python — let PG raise; the API returns the error.
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT id::text, name, slug FROM tenants WHERE name ~ %s "
-                "ORDER BY created_at",
+                "SELECT id::text, name, slug FROM tenants WHERE name ~ %s " "ORDER BY created_at",
                 (pattern,),
             )
             return [{"id": r[0], "name": r[1], "slug": r[2]} for r in cur.fetchall()]
@@ -312,6 +315,7 @@ class PostgresStore:
 
     def insert_audit(self, **kw) -> UUID:
         import json
+
         details = kw.get("details") or {}
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
@@ -343,21 +347,21 @@ class PostgresStore:
             rows = cur.fetchall()
         out = []
         for r in rows:
-            out.append({
-                "id": r[0],
-                "occurred_at": r[1].isoformat() if r[1] else None,
-                "actor": r[2],
-                "action": r[3],
-                "target_kind": r[4],
-                "target_id": r[5],
-                "details": r[6] or {},
-                "request_ip": r[7],
-            })
+            out.append(
+                {
+                    "id": r[0],
+                    "occurred_at": r[1].isoformat() if r[1] else None,
+                    "actor": r[2],
+                    "action": r[3],
+                    "target_kind": r[4],
+                    "target_id": r[5],
+                    "details": r[6] or {},
+                    "request_ip": r[7],
+                }
+            )
         return out
 
-    def count_runs_for_tenant_since(
-        self, tenant_id: TenantId, since: datetime
-    ) -> int:
+    def count_runs_for_tenant_since(self, tenant_id: TenantId, since: datetime) -> int:
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT count(*) FROM runs WHERE tenant_id = %s AND started_at >= %s",
@@ -399,6 +403,7 @@ class PostgresStore:
 
 
 # ----- row mappers ---------------------------------------------------------
+
 
 def _row_to_tenant(row: Iterable | None) -> Tenant | None:
     if row is None:
@@ -447,11 +452,15 @@ def _row_to_run(row: Iterable) -> RunRecord:
     total_cost = float(cols[10]) if len(cols) > 10 and cols[10] is not None else 0.0
     llm_calls = int(cols[11]) if len(cols) > 11 and cols[11] is not None else 0
     final_output = None
+    agent_traces = []
     if output is not None:
         try:
             from bizpulse.models.strategy import MarketingStrategy
+
             final_output = MarketingStrategy.model_validate(output)
-        except Exception:  # noqa: BLE001
+            if final_output and final_output.agent_traces:
+                agent_traces = final_output.agent_traces
+        except Exception:
             final_output = None
     return RunRecord(
         id=rid,
@@ -461,7 +470,7 @@ def _row_to_run(row: Iterable) -> RunRecord:
         started_at=started_at,
         finished_at=finished_at,
         error=error,
-        agent_traces=[],
+        agent_traces=agent_traces,
         final_output=final_output,
         total_input_tokens=total_input,
         total_output_tokens=total_output,

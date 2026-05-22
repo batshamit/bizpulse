@@ -17,6 +17,7 @@ def clean_store() -> None:
 
 # ---- signup-code gate ----------------------------------------------------
 
+
 def test_signup_open_when_code_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("BIZPULSE_SIGNUP_CODE", raising=False)
     with TestClient(app) as client:
@@ -54,6 +55,7 @@ def test_signup_gated_when_code_set(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # ---- daily rate limit ----------------------------------------------------
+
 
 def test_daily_limit_blocks_after_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("BIZPULSE_SIGNUP_CODE", raising=False)
@@ -95,6 +97,7 @@ def test_daily_limit_disabled_when_zero(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 # ---- usage endpoint ------------------------------------------------------
+
 
 def test_usage_endpoint_reflects_runs(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("BIZPULSE_SIGNUP_CODE", raising=False)

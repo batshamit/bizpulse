@@ -141,7 +141,8 @@ class _Retryable(Exception):
 
 # ---- vendor-specific factories ------------------------------------------
 
-def OpenAIClient(model: str = "gpt-4o", **kw: Any) -> OpenAICompatClient:
+
+def openai_client(model: str = "gpt-4o", **kw: Any) -> OpenAICompatClient:
     return OpenAICompatClient(
         vendor="openai",
         model=model,
@@ -151,7 +152,7 @@ def OpenAIClient(model: str = "gpt-4o", **kw: Any) -> OpenAICompatClient:
     )
 
 
-def PerplexityClient(model: str = "sonar-pro", **kw: Any) -> OpenAICompatClient:
+def perplexity_client(model: str = "sonar-pro", **kw: Any) -> OpenAICompatClient:
     """Perplexity has built-in web search — best for the Competitor Scout role."""
     return OpenAICompatClient(
         vendor="perplexity",
@@ -162,7 +163,7 @@ def PerplexityClient(model: str = "sonar-pro", **kw: Any) -> OpenAICompatClient:
     )
 
 
-def GrokClient(model: str = "grok-4", **kw: Any) -> OpenAICompatClient:
+def grok_client(model: str = "grok-4", **kw: Any) -> OpenAICompatClient:
     """xAI Grok — adds X/Twitter context. Default model 'grok-4'."""
     return OpenAICompatClient(
         vendor="xai",
@@ -173,7 +174,7 @@ def GrokClient(model: str = "grok-4", **kw: Any) -> OpenAICompatClient:
     )
 
 
-def DeepSeekClient(model: str = "deepseek-chat", **kw: Any) -> OpenAICompatClient:
+def deepseek_client(model: str = "deepseek-chat", **kw: Any) -> OpenAICompatClient:
     """DeepSeek — cheap and strong on reasoning. Use 'deepseek-reasoner' for chain-of-thought."""
     return OpenAICompatClient(
         vendor="deepseek",
@@ -184,7 +185,7 @@ def DeepSeekClient(model: str = "deepseek-chat", **kw: Any) -> OpenAICompatClien
     )
 
 
-def GroqClient(model: str = "llama-3.3-70b-versatile", **kw: Any) -> OpenAICompatClient:
+def groq_client(model: str = "llama-3.3-70b-versatile", **kw: Any) -> OpenAICompatClient:
     """Groq — open-source models (Llama 3.3, Mixtral, Gemma 2) on LPU hardware.
 
     NOT xAI's Grok (see GrokClient for that). Groq is the fast-inference
@@ -200,7 +201,7 @@ def GroqClient(model: str = "llama-3.3-70b-versatile", **kw: Any) -> OpenAICompa
     )
 
 
-def OpenRouterClient(
+def openrouter_client(
     model: str = "anthropic/claude-sonnet-4-6",
     **kw: Any,
 ) -> OpenAICompatClient:
@@ -221,7 +222,7 @@ def OpenRouterClient(
     )
 
 
-def MistralClient(model: str = "mistral-small-latest", **kw: Any) -> OpenAICompatClient:
+def mistral_client(model: str = "mistral-small-latest", **kw: Any) -> OpenAICompatClient:
     """Mistral — European-built foundation models (mistral-large/medium/small,
     ministral-8b/3b, codestral). OpenAI-compatible /v1/chat/completions.
 

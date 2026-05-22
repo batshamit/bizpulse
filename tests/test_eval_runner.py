@@ -13,10 +13,7 @@ from bizpulse.agents.council import Council
 from bizpulse.eval import EvalRunner, GoldenExample, load_golden
 from bizpulse.llm import FakeLLMClient
 
-
-GOLDEN_NEOBANK = (
-    Path(__file__).resolve().parent / "eval" / "golden" / "fintech" / "neobank_v1.json"
-)
+GOLDEN_NEOBANK = Path(__file__).resolve().parent / "eval" / "golden" / "fintech" / "neobank_v1.json"
 
 
 class _FakeEmbedder:
@@ -44,7 +41,6 @@ async def test_eval_runner_executes_neobank_golden(tmp_path: Path) -> None:
     """Synth: judge returns a hard-coded BrandAnalysis JSON; we verify the
     runner ingests, runs, scores, and reports."""
     golden = load_golden(GOLDEN_NEOBANK)
-    chunk_ids: list[str] = []  # we'll fill these from a peek into Qdrant
 
     canned_brand = {
         "positioning": "compliance-first neobank for gig-economy workers",
@@ -55,7 +51,11 @@ async def test_eval_runner_executes_neobank_golden(tmp_path: Path) -> None:
             "RBI digital-lending guideline compliance baked in",
         ],
         "citations": [
-            {"chunk_id": "00000000-0000-0000-0000-000000000001", "quote": "neobank for gig", "confidence": 0.9}
+            {
+                "chunk_id": "00000000-0000-0000-0000-000000000001",
+                "quote": "neobank for gig",
+                "confidence": 0.9,
+            }
         ],
     }
     judge = FakeLLMClient(name="judge", vendor="fake", response=json.dumps(canned_brand))

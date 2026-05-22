@@ -6,8 +6,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
-from bizpulse.agents.runner import AgentRunResult
 from bizpulse.agents.council import CouncilResult
+from bizpulse.agents.runner import AgentRunResult
 from bizpulse.eval.golden import TaskExpectation
 from bizpulse.eval.scorer import (
     extract_cited_chunk_ids,
@@ -117,7 +117,9 @@ def test_score_fails_on_forbidden_keyword() -> None:
 
 def test_score_fails_on_too_few_citations() -> None:
     out = BrandAnalysis(
-        positioning="x", tone="x", value_props=["a"],
+        positioning="x",
+        tone="x",
+        value_props=["a"],
         citations=[Citation(chunk_id=uuid4())],
     )
     result = AgentRunResult(
@@ -133,7 +135,9 @@ def test_score_fails_on_too_few_citations() -> None:
 
 def test_score_fails_on_latency_budget() -> None:
     out = BrandAnalysis(
-        positioning="x", tone="x", value_props=["a"],
+        positioning="x",
+        tone="x",
+        value_props=["a"],
         citations=[Citation(chunk_id=uuid4())],
     )
     result = AgentRunResult(

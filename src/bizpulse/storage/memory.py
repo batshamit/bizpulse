@@ -102,12 +102,14 @@ class InMemoryStore:
             r = self._runs.get(run_id)
             if r is None:
                 return
-            self._runs[run_id] = r.model_copy(update={
-                "total_cost_usd": cost_usd,
-                "total_input_tokens": input_tokens,
-                "total_output_tokens": output_tokens,
-                "llm_call_count": llm_calls,
-            })
+            self._runs[run_id] = r.model_copy(
+                update={
+                    "total_cost_usd": cost_usd,
+                    "total_input_tokens": input_tokens,
+                    "total_output_tokens": output_tokens,
+                    "llm_call_count": llm_calls,
+                }
+            )
 
     def delete_tenant(self, tenant_id: TenantId) -> bool:
         with self._lock:
@@ -126,6 +128,7 @@ class InMemoryStore:
 
     def find_tenants_by_name_regex(self, pattern: str) -> list[dict]:
         import re
+
         try:
             rx = re.compile(pattern)
         except re.error:
@@ -147,6 +150,7 @@ class InMemoryStore:
     def insert_audit(self, **kw) -> UUID:
         from datetime import datetime as _dt
         from uuid import uuid4 as _u4
+
         rec = {
             "id": str(_u4()),
             "occurred_at": _dt.now().isoformat(),
@@ -166,7 +170,7 @@ class InMemoryStore:
         if not hasattr(self, "_audit"):
             return []
         items = list(reversed(self._audit))
-        return items[offset:offset + limit]
+        return items[offset : offset + limit]
 
     def update_tenant(
         self,
@@ -260,7 +264,9 @@ class InMemoryStore:
                 update={
                     "status": status,
                     "error": error,
-                    "finished_at": utcnow() if status in {"complete", "failed"} else run.finished_at,
+                    "finished_at": (
+                        utcnow() if status in {"complete", "failed"} else run.finished_at
+                    ),
                 }
             )
             self._runs[run_id] = run
@@ -270,9 +276,7 @@ class InMemoryStore:
         ids = self._runs_by_business.get(business_id, [])
         return [self._runs[r] for r in ids if r in self._runs]
 
-    def count_runs_for_tenant_since(
-        self, tenant_id: TenantId, since: datetime
-    ) -> int:
+    def count_runs_for_tenant_since(self, tenant_id: TenantId, since: datetime) -> int:
         """Number of runs created by this tenant after `since`. Used for
         rate-limiting POST /analyze."""
         n = 0

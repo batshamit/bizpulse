@@ -15,11 +15,10 @@ from bizpulse.models.compliance import (
     ComplianceFlag,
     ComplianceReport,
     LLLLMetric,
-    PolicyRef,
 )
 
-
 # ---- registry --------------------------------------------------------------
+
 
 def test_registry_has_minimum_coverage() -> None:
     assert len(list_policies()) >= 25, "registry should have at least 25 policies"
@@ -84,9 +83,13 @@ def test_every_policy_has_required_fields() -> None:
 
 # ---- model construction ----------------------------------------------------
 
+
 def test_llll_metric_average_and_validation() -> None:
     m = LLLLMetric(
-        latest=0.9, least=0.7, lost=0.8, lowest=0.85,
+        last=0.9,
+        least=0.7,
+        lost=0.8,
+        lowest=0.85,
         narrative="Strong recent-regulation coverage; one warning-tier flag.",
     )
     assert m.average == pytest.approx((0.9 + 0.7 + 0.8 + 0.85) / 4)
@@ -94,8 +97,9 @@ def test_llll_metric_average_and_validation() -> None:
 
 def test_llll_metric_rejects_out_of_range() -> None:
     from pydantic import ValidationError
+
     with pytest.raises(ValidationError):
-        LLLLMetric(latest=1.5, least=0.5, lost=0.5, lowest=0.5, narrative="x")
+        LLLLMetric(last=1.5, least=0.5, lost=0.5, lowest=0.5, narrative="x")
 
 
 def test_compliance_flag_minimal() -> None:
@@ -122,7 +126,10 @@ def test_compliance_report_round_trip() -> None:
             ),
         ],
         metrics=LLLLMetric(
-            latest=0.95, least=0.6, lost=0.7, lowest=0.8,
+            last=0.95,
+            least=0.6,
+            lost=0.7,
+            lowest=0.8,
             narrative="One MahaRERA disclosure gap; otherwise strong DPDP posture.",
         ),
         overall_compliance_score=0.72,

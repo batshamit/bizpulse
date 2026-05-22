@@ -38,70 +38,82 @@ class _Embedder:
 # Canned outputs — schema-valid for each role's expected output type.
 _CHUNK_ID = str(uuid4())
 
-_BRAND_JSON = json.dumps({
-    "positioning": "compliance-first neobank",
-    "tone": "trustworthy",
-    "value_props": ["full-KYC", "instant credit"],
-    "citations": [{"chunk_id": _CHUNK_ID, "quote": "we are compliance-first", "confidence": 0.9}],
-})
+_BRAND_JSON = json.dumps(
+    {
+        "positioning": "compliance-first neobank",
+        "tone": "trustworthy",
+        "value_props": ["full-KYC", "instant credit"],
+        "citations": [
+            {"chunk_id": _CHUNK_ID, "quote": "we are compliance-first", "confidence": 0.9}
+        ],
+    }
+)
 
-_AUDIENCE_JSON = json.dumps({
-    "primary": {
-        "name": "Gig workers",
-        "description": "platform earners 25-35 in tier-1 cities",
-        "motivations": ["fast onboarding"],
-        "pain_points": ["traditional bank rejection"],
-        "citations": [{"chunk_id": _CHUNK_ID, "quote": "gig", "confidence": 0.8}],
-    },
-    "secondary": [],
-    "citations": [{"chunk_id": _CHUNK_ID, "quote": "ICP", "confidence": 0.85}],
-})
+_AUDIENCE_JSON = json.dumps(
+    {
+        "primary": {
+            "name": "Gig workers",
+            "description": "platform earners 25-35 in tier-1 cities",
+            "motivations": ["fast onboarding"],
+            "pain_points": ["traditional bank rejection"],
+            "citations": [{"chunk_id": _CHUNK_ID, "quote": "gig", "confidence": 0.8}],
+        },
+        "secondary": [],
+        "citations": [{"chunk_id": _CHUNK_ID, "quote": "ICP", "confidence": 0.85}],
+    }
+)
 
-_COMPETITOR_JSON = json.dumps({
-    "competitors": [
-        {
-            "name": "Jupiter",
-            "url": "https://jupiter.money",
-            "positioning": "lifestyle neobank",
-            "strengths": ["app polish"],
-            "weaknesses": ["regulatory posture"],
-            "verified": True,
-            "citations": [{"chunk_id": _CHUNK_ID, "confidence": 0.7}],
-        }
-    ],
-    "market_position": "late entrant; differentiates on RBI compliance",
-    "citations": [{"chunk_id": _CHUNK_ID, "confidence": 0.8}],
-})
+_COMPETITOR_JSON = json.dumps(
+    {
+        "competitors": [
+            {
+                "name": "Jupiter",
+                "url": "https://jupiter.money",
+                "positioning": "lifestyle neobank",
+                "strengths": ["app polish"],
+                "weaknesses": ["regulatory posture"],
+                "verified": True,
+                "citations": [{"chunk_id": _CHUNK_ID, "confidence": 0.7}],
+            }
+        ],
+        "market_position": "late entrant; differentiates on RBI compliance",
+        "citations": [{"chunk_id": _CHUNK_ID, "confidence": 0.8}],
+    }
+)
 
-_CONTENT_JSON = json.dumps({
-    "findings": [],
-    "pillars_strong": ["regulatory_trust"],
-    "pillars_weak": ["financial_literacy"],
-    "citations": [],
-})
+_CONTENT_JSON = json.dumps(
+    {
+        "findings": [],
+        "pillars_strong": ["regulatory_trust"],
+        "pillars_weak": ["financial_literacy"],
+        "citations": [],
+    }
+)
 
-_STRATEGY_JSON = json.dumps({
-    "tenant_id": "00000000-0000-0000-0000-000000000001",  # placeholder; node doesn't validate UUID alignment
-    "business_id": "00000000-0000-0000-0000-000000000002",
-    "industry": "fintech",
-    "brand": json.loads(_BRAND_JSON),
-    "audience": json.loads(_AUDIENCE_JSON),
-    "competitive_landscape": json.loads(_COMPETITOR_JSON),
-    "content_audit": json.loads(_CONTENT_JSON),
-    "recommendations": [
-        {
-            "channel": "linkedin",
-            "action": "Publish weekly RBI-compliance explainers",
-            "rationale": "Audience is regulation-anxious",
-            "evidence_chunk_ids": [_CHUNK_ID],
-            "confidence": 0.88,
-            "priority": "P0",
-            "compliance_flags": ["RBI digital lending guidelines"],
-        }
-    ],
-    "overall_confidence": 0.85,
-    "summary": "Compliance-first positioning, lean into LinkedIn + WhatsApp.",
-})
+_STRATEGY_JSON = json.dumps(
+    {
+        "tenant_id": "00000000-0000-0000-0000-000000000001",  # placeholder; node doesn't validate UUID alignment
+        "business_id": "00000000-0000-0000-0000-000000000002",
+        "industry": "fintech",
+        "brand": json.loads(_BRAND_JSON),
+        "audience": json.loads(_AUDIENCE_JSON),
+        "competitive_landscape": json.loads(_COMPETITOR_JSON),
+        "content_audit": json.loads(_CONTENT_JSON),
+        "recommendations": [
+            {
+                "channel": "linkedin",
+                "action": "Publish weekly RBI-compliance explainers",
+                "rationale": "Audience is regulation-anxious",
+                "evidence_chunk_ids": [_CHUNK_ID],
+                "confidence": 0.88,
+                "priority": "P0",
+                "compliance_flags": ["RBI digital lending guidelines"],
+            }
+        ],
+        "overall_confidence": 0.85,
+        "summary": "Compliance-first positioning, lean into LinkedIn + WhatsApp.",
+    }
+)
 
 
 def _route(_system: str, user: str) -> str:
@@ -136,12 +148,18 @@ def runner_with_chunks(tmp_path: Path) -> AgentRunner:
         source_type="about_page",
         content_hash="abcdef0123456789",
     )
-    repo.upsert([
-        EmbeddedChunk(
-            chunk=Chunk(text="we are a compliance-first neobank for gig workers", metadata=meta),
-            vector=[1.0, 0.0, 0.0, 0.0], embed_model="x", embed_dim=4,
-        )
-    ])
+    repo.upsert(
+        [
+            EmbeddedChunk(
+                chunk=Chunk(
+                    text="we are a compliance-first neobank for gig workers", metadata=meta
+                ),
+                vector=[1.0, 0.0, 0.0, 0.0],
+                embed_model="x",
+                embed_dim=4,
+            )
+        ]
+    )
     retrieval = RetrievalEngine(repo, embedder=_Embedder())
     judge = CallableLLMClient(name="judge", vendor="fake", fn=_route)
     member = CallableLLMClient(name="m", vendor="fake", fn=_route)
@@ -193,12 +211,14 @@ async def test_graph_continues_when_one_node_fails(
     monkeypatch.setattr(runner_with_chunks, "run", maybe_fail)
 
     graph = build_analysis_graph(runner_with_chunks)
-    final = await graph.ainvoke({
-        "tenant_id": runner_with_chunks.retrieval.repo.tenant_id,
-        "business_id": uuid4(),
-        "industry": "fintech",
-        "business_url": "https://example.test",
-    })
+    final = await graph.ainvoke(
+        {
+            "tenant_id": runner_with_chunks.retrieval.repo.tenant_id,
+            "business_id": uuid4(),
+            "industry": "fintech",
+            "business_url": "https://example.test",
+        }
+    )
     assert final["audience"] is None
     assert final["brand"] is not None
     # Strategist still ran (the strategist's _summarize_prior handles None slots).

@@ -19,26 +19,30 @@ from bizpulse.ingest.crawler import (
 )
 from bizpulse.models import RawArtifact
 
-
 # ---- classify_url ---------------------------------------------------------
 
-@pytest.mark.parametrize("url, expected", [
-    ("https://acme.test/", "website_page"),
-    ("https://acme.test/pricing", "pricing_page"),
-    ("https://acme.test/Pricing/", "pricing_page"),
-    ("https://acme.test/about-us", "about_page"),
-    ("https://acme.test/blog/launch", "blog_post"),
-    ("https://acme.test/case-studies/foo", "case_study"),
-    ("https://acme.test/customers/bar", "case_study"),
-    ("https://acme.test/testimonials", "testimonial"),
-    ("https://acme.test/insights/q3", "blog_post"),
-    ("https://acme.test/products/widget", "website_page"),
-])
+
+@pytest.mark.parametrize(
+    "url, expected",
+    [
+        ("https://acme.test/", "website_page"),
+        ("https://acme.test/pricing", "pricing_page"),
+        ("https://acme.test/Pricing/", "pricing_page"),
+        ("https://acme.test/about-us", "about_page"),
+        ("https://acme.test/blog/launch", "blog_post"),
+        ("https://acme.test/case-studies/foo", "case_study"),
+        ("https://acme.test/customers/bar", "case_study"),
+        ("https://acme.test/testimonials", "testimonial"),
+        ("https://acme.test/insights/q3", "blog_post"),
+        ("https://acme.test/products/widget", "website_page"),
+    ],
+)
 def test_classify_url(url: str, expected: str) -> None:
     assert classify_url(url) == expected
 
 
 # ---- extract_text ---------------------------------------------------------
+
 
 def test_extract_text_strips_scripts_and_collapses_ws() -> None:
     html = """
@@ -62,6 +66,7 @@ def test_extract_text_handles_empty_html() -> None:
 
 
 # ---- FakeCrawler integration ---------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_fake_crawler_yields_and_restamps_tenant() -> None:

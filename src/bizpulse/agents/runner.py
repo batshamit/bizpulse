@@ -39,6 +39,7 @@ T = TypeVar("T", bound=BaseModel)
 
 # ---- result type --------------------------------------------------------
 
+
 @dataclass
 class AgentRunResult(Generic[T]):
     """One full run of one agent. The interesting bit for callers is `output`;
@@ -156,7 +157,7 @@ def extract_json(text: str) -> object:
     candidate = text
     fence_open = _FENCE_OPEN_RE.match(candidate)
     if fence_open:
-        candidate = candidate[fence_open.end():]
+        candidate = candidate[fence_open.end() :]
     repaired = _balance_truncated_json(candidate)
     if repaired:
         try:
@@ -167,6 +168,7 @@ def extract_json(text: str) -> object:
 
 
 # ---- runner ------------------------------------------------------------
+
 
 class AgentRunner:
     """Bind a tenant context (retrieval, prompts, council) and run agents.

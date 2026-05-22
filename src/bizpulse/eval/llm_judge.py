@@ -12,7 +12,6 @@ because they're both strong at meta-evaluation.
 
 from __future__ import annotations
 
-import json
 from textwrap import dedent
 
 from pydantic import BaseModel, Field
@@ -52,8 +51,7 @@ class JudgeRubric(BaseModel):
         return self.avg / 10.0
 
 
-_JUDGE_SYSTEM = dedent(
-    """
+_JUDGE_SYSTEM = dedent("""
     You are an evaluator of AI marketing-strategy agents. You score the agent's
     output against a rubric. Reply ONLY with JSON in this shape (no prose):
       {
@@ -65,8 +63,7 @@ _JUDGE_SYSTEM = dedent(
       }
     Be strict. Reserve scores ≥ 9 for outputs that are notably better than
     typical. Penalize hallucinated facts and unsupported numbers.
-    """
-).strip()
+    """).strip()
 
 
 def _format_chunks(chunks: list[RetrievedChunk]) -> str:

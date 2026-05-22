@@ -27,7 +27,14 @@ def version() -> None:
 @app.command()
 def info() -> None:
     """Print effective settings (secrets redacted)."""
-    redact = {"postgres_password", "llm_api_key", "anthropic_api_key", "tavily_api_key", "brave_search_api_key", "qdrant_api_key"}
+    redact = {
+        "postgres_password",
+        "llm_api_key",
+        "anthropic_api_key",
+        "tavily_api_key",
+        "brave_search_api_key",
+        "qdrant_api_key",
+    }
     for k, v in settings.model_dump().items():
         shown = "***" if k in redact and v else v
         typer.echo(f"{k:<22} {shown}")

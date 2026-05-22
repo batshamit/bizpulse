@@ -32,8 +32,8 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Sequence
 
 from bizpulse.llm.base import CompletionResult, LLMClient, LLMError
 from bizpulse.logging import get_logger
@@ -43,23 +43,24 @@ log = get_logger(__name__)
 
 # --- result types ----------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class ProposalRecord:
     """One member's response in one round."""
 
-    member: str                       # member.name
+    member: str  # member.name
     vendor: str
-    round_idx: int                    # 0 == first round
+    round_idx: int  # 0 == first round
     text: str
     cost_usd: float
     latency_ms: float
-    error: str | None = None          # if member raised, text=='' and error set
+    error: str | None = None  # if member raised, text=='' and error set
 
 
 @dataclass
 class CouncilResult:
-    final: str                        # synthesizer's text (caller validates against schema)
-    judge: str                        # judge.name that synthesized
+    final: str  # synthesizer's text (caller validates against schema)
+    judge: str  # judge.name that synthesized
     rounds: list[list[ProposalRecord]] = field(default_factory=list)
     minority_opinions: list[str] = field(default_factory=list)
     cost_usd: float = 0.0
@@ -71,6 +72,7 @@ class CouncilError(RuntimeError):
 
 
 # --- the council -----------------------------------------------------------
+
 
 class Council:
     """A debate-based multi-LLM ensemble.
@@ -120,8 +122,7 @@ class Council:
             failed = [r for r in results if r.error]
             if failed:
                 active_members = [
-                    m for m in active_members
-                    if not any(f.member == m.name for f in failed)
+                    m for m in active_members if not any(f.member == m.name for f in failed)
                 ]
                 for f in failed:
                     minority.append(f"{f.member} dropped (round {round_idx}): {f.error}")
@@ -144,7 +145,9 @@ class Council:
         except (LLMError, Exception) as exc:
             log.warning("council.judge_failed", judge=self.judge.name, error=str(exc)[:200])
             if self.fallback_judge is None:
-                raise CouncilError(f"judge {self.judge.name} failed and no fallback set: {exc}") from exc
+                raise CouncilError(
+                    f"judge {self.judge.name} failed and no fallback set: {exc}"
+                ) from exc
             synth = await self.fallback_judge.complete(
                 system=self._synthesis_system(system),
                 user=synth_user,
@@ -152,7 +155,9 @@ class Council:
                 temperature=self.synthesis_temperature,
             )
             judge_used = self.fallback_judge.name
-            minority.append(f"judge fallback used: primary={self.judge.name} failed -> {self.fallback_judge.name}")
+            minority.append(
+                f"judge fallback used: primary={self.judge.name} failed -> {self.fallback_judge.name}"
+            )
 
         total_cost = synth.cost_usd + sum(p.cost_usd for r in rounds for p in r)
         latency_ms = (time.perf_counter() - t0) * 1000.0
@@ -229,14 +234,13 @@ class Council:
         own previous-round proposal so they only see peers'.
         """
         survivors = [
-            p for p in prev_round
+            p
+            for p in prev_round
             if not p.error and (exclude_member is None or p.member != exclude_member)
         ]
         if not survivors:
             return original_user
-        peer_block = "\n\n".join(
-            f"--- proposal from {p.member} ---\n{p.text}" for p in survivors
-        )
+        peer_block = "\n\n".join(f"--- proposal from {p.member} ---\n{p.text}" for p in survivors)
         return (
             f"{original_user}\n\n"
             "----- previous round, peer proposals -----\n"

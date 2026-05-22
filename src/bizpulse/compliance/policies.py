@@ -21,7 +21,6 @@ from __future__ import annotations
 
 from bizpulse.models.compliance import PolicyRef
 
-
 # --- india: central / sectoral regulators -----------------------------------
 
 _RBI_DIGITAL_LENDING = PolicyRef(
@@ -508,19 +507,38 @@ _UK_ICO_DP = PolicyRef(
 
 _ALL: list[PolicyRef] = [
     # India central
-    _RBI_DIGITAL_LENDING, _RBI_KYC, _SEBI_INVESTOR_ADS, _IRDAI_INSURANCE_ADS,
-    _DPDP_2023, _CPA_MISLEADING_ADS, _GST_MARKETING, _ASCI_CODE,
-    _TRAI_TCCCPR, _FEMA_NRI,
+    _RBI_DIGITAL_LENDING,
+    _RBI_KYC,
+    _SEBI_INVESTOR_ADS,
+    _IRDAI_INSURANCE_ADS,
+    _DPDP_2023,
+    _CPA_MISLEADING_ADS,
+    _GST_MARKETING,
+    _ASCI_CODE,
+    _TRAI_TCCCPR,
+    _FEMA_NRI,
     # India state
-    _RERA_MAHARASHTRA, _RERA_KARNATAKA, _RERA_TAMILNADU, _RERA_DELHI, _RERA_UP,
+    _RERA_MAHARASHTRA,
+    _RERA_KARNATAKA,
+    _RERA_TAMILNADU,
+    _RERA_DELHI,
+    _RERA_UP,
     # India sector
-    _BIS_IS_CODES, _GRIHA, _IGBC,
+    _BIS_IS_CODES,
+    _GRIHA,
+    _IGBC,
     # EU
-    _GDPR, _EU_AI_ACT, _EU_DSA, _EU_MIFID2,
+    _GDPR,
+    _EU_AI_ACT,
+    _EU_DSA,
+    _EU_MIFID2,
     # US
-    _FTC_ENDORSEMENTS, _US_TCPA, _US_SEC_ADV,
+    _FTC_ENDORSEMENTS,
+    _US_TCPA,
+    _US_SEC_ADV,
     # UK
-    _FCA_CONSUMER_DUTY, _UK_ICO_DP,
+    _FCA_CONSUMER_DUTY,
+    _UK_ICO_DP,
 ]
 
 POLICIES: dict[str, PolicyRef] = {p.slug: p for p in _ALL}

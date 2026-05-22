@@ -12,18 +12,20 @@ existence.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from uuid import UUID
 
 from bizpulse.models import (
-    Business,
-    RunRecord,
     SUPPORTED_INDUSTRIES,
+    Business,
     Tenant,
     load_all_industries,
     load_industry,
 )
 from bizpulse.storage import Store, get_default_store
+
+_BACKGROUND_TASKS: set[asyncio.Task[Any]] = set()
 
 
 class AuthError(RuntimeError):
@@ -35,6 +37,7 @@ class NotFoundError(RuntimeError):
 
 
 # --- helpers ------------------------------------------------------------
+
 
 def _store() -> Store:
     return get_default_store()
@@ -59,6 +62,7 @@ def _resolve_business(tenant: Tenant, business_id: str) -> Business:
 
 # --- tenant tools -------------------------------------------------------
 
+
 def register_tenant(name: str, slug: str | None = None) -> dict[str, Any]:
     """Create a new tenant. Returns the api_key (only shown once)."""
     tenant = _store().create_tenant(name=name, slug=slug)
@@ -71,6 +75,7 @@ def whoami(api_key: str) -> dict[str, Any]:
 
 
 # --- industry catalog ---------------------------------------------------
+
 
 def list_industries() -> list[str]:
     """Names of supported industry verticals."""
@@ -91,6 +96,7 @@ def list_industry_packs() -> dict[str, dict[str, Any]]:
 
 # --- business tools -----------------------------------------------------
 
+
 def register_business(api_key: str, url: str, industry: str | None = None) -> dict[str, Any]:
     tenant = _resolve_tenant(api_key)
     if industry is not None and industry not in SUPPORTED_INDUSTRIES:
@@ -106,13 +112,29 @@ def list_businesses(api_key: str) -> list[dict[str, Any]]:
 
 # --- pipeline tools -----------------------------------------------------
 
-def analyze_business(api_key: str, business_id: str) -> dict[str, Any]:
+
+async def analyze_business(
+    api_key: str,
+    business_id: str,
+    num_llms: int | None = None,
+) -> dict[str, Any]:
     """Kick off the multi-agent pipeline for a business. Returns a RunRecord
-    in `pending` state. The actual pipeline lands in Phase 6 — this tool is
-    the public contract Phase 6 will fulfil."""
+    in `pending` state and schedules the background analysis task.
+    """
     tenant = _resolve_tenant(api_key)
     biz = _resolve_business(tenant, business_id)
     run = _store().create_run(tenant.id, biz.id)
+    from bizpulse.api.runner_service import run_analysis_background
+
+    task = asyncio.create_task(
+        run_analysis_background(
+            run_id=run.id,
+            business=biz,
+            num_llms=num_llms,
+        )
+    )
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
     return run.model_dump(mode="json")
 
 
@@ -132,48 +154,96 @@ def list_runs_for_business(api_key: str, business_id: str) -> list[dict[str, Any
 
 
 # --- knowledge query (RAG) ---------------------------------------------
-# query_business_knowledge() needs a real embedder. In Phase 8 we ship the
-# tool wired to RetrievalEngine but it returns an explanatory error if TEI
-# isn't running. Phase 6/9 follow-up wires a real fallback (Anthropic
-# embeddings).
 
-def query_business_knowledge(
+
+async def query_business_knowledge(
     api_key: str,
     business_id: str,
     question: str,
     top_k: int = 8,
 ) -> dict[str, Any]:
+    """Query the business's vector knowledge base from the latest completed run."""
     tenant = _resolve_tenant(api_key)
     biz = _resolve_business(tenant, business_id)
+
+    runs = _store().list_runs_for_business(biz.id)
+    completed_runs = [r for r in runs if r.status == "complete"]
+    if not completed_runs:
+        return {
+            "tenant_id": str(tenant.id),
+            "business_id": str(biz.id),
+            "question": question,
+            "top_k": top_k,
+            "chunks": [],
+            "status": "pending_pipeline",
+            "detail": "No completed runs found for this business. Run analyze_business first.",
+        }
+    latest_run = max(completed_runs, key=lambda r: r.finished_at or r.started_at)
+    run_id = latest_run.id
+
+    from qdrant_client import QdrantClient
+
+    from bizpulse.api.runner_service import _QDRANT_BASE, _pick_embedder
+    from bizpulse.models.retrieval import RetrievalQuery
+    from bizpulse.retrieval import RetrievalEngine, TenantQdrant
+
+    embedder = _pick_embedder()
+    qd_dir = _QDRANT_BASE / f"run-{run_id}"
+    repo = TenantQdrant(tenant.id, client=QdrantClient(path=str(qd_dir)))
+    retriever = RetrievalEngine(repo, embedder=embedder)
+
+    query = RetrievalQuery(
+        text=question,
+        tenant_id=tenant.id,
+        business_id=biz.id,
+        industry=biz.industry,
+        top_k=top_k,
+    )
+    res = await retriever.search(query)
+
     return {
         "tenant_id": str(tenant.id),
         "business_id": str(biz.id),
         "question": question,
         "top_k": top_k,
-        "chunks": [],
-        "status": "not_implemented",
-        "detail": (
-            "query_business_knowledge requires an embedder + populated Qdrant "
-            "collection. TEI server isn't running on the shared box yet "
-            "(awaiting free GPU). Once it is, this tool returns RetrievedChunks "
-            "via bizpulse.retrieval.RetrievalEngine."
-        ),
+        "chunks": [c.model_dump(mode="json") for c in res.chunks],
+        "status": "complete",
+        "detail": "Retrieved chunks from the active run vector database.",
     }
 
 
-def get_marketing_recommendations(
+async def get_marketing_recommendations(
     api_key: str,
     business_id: str,
     channel: str | None = None,
 ) -> dict[str, Any]:
-    """Phase 6 dependency. Returns a 'pending pipeline' status until Phase 6 lands."""
+    """Retrieve marketing recommendations from the latest completed run."""
     tenant = _resolve_tenant(api_key)
     biz = _resolve_business(tenant, business_id)
+
+    runs = _store().list_runs_for_business(biz.id)
+    completed_runs = [r for r in runs if r.status == "complete" and r.final_output is not None]
+    if not completed_runs:
+        return {
+            "tenant_id": str(tenant.id),
+            "business_id": str(biz.id),
+            "channel": channel,
+            "recommendations": [],
+            "status": "pending_pipeline",
+            "detail": "No completed runs with final output found for this business.",
+        }
+    latest_run = max(completed_runs, key=lambda r: r.finished_at or r.started_at)
+    strategy = latest_run.final_output
+    assert strategy is not None
+    recs = strategy.recommendations
+    if channel:
+        recs = [r for r in recs if r.channel == channel]
+
     return {
         "tenant_id": str(tenant.id),
         "business_id": str(biz.id),
         "channel": channel,
-        "recommendations": [],
-        "status": "pending_pipeline",
-        "detail": "The multi-agent pipeline (Phase 6) is not yet implemented. Run analyze_business() to register a run; once the pipeline lands, recommendations will populate.",
+        "recommendations": [r.model_dump(mode="json") for r in recs],
+        "status": "complete",
+        "detail": f"Loaded recommendations from run {latest_run.id}.",
     }

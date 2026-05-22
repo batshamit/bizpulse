@@ -30,6 +30,7 @@ log = get_logger(__name__)
 
 # ---- protocol -------------------------------------------------------------
 
+
 class CrawlerProtocol(Protocol):
     async def crawl(
         self,
@@ -63,11 +64,13 @@ def classify_url(url: str) -> SourceType:
 
 # ---- text extraction ----------------------------------------------------
 
+
 def extract_text(html: str, url: str) -> str:
     """Extract clean main-content text. Falls back to a minimal HTML strip
     if trafilatura isn't available or returns nothing useful."""
     try:
         import trafilatura  # type: ignore[import-not-found]
+
         out = trafilatura.extract(
             html,
             url=url,
@@ -111,9 +114,7 @@ class PlaywrightCrawler:
         nav_timeout_ms: int = 30_000,
         request_timeout_ms: int = 60_000,
     ) -> None:
-        self.screenshots_dir = (
-            Path(screenshots_dir) if screenshots_dir else None
-        )
+        self.screenshots_dir = Path(screenshots_dir) if screenshots_dir else None
         if self.screenshots_dir:
             self.screenshots_dir.mkdir(parents=True, exist_ok=True)
         self.user_agent = user_agent
@@ -161,7 +162,7 @@ class PlaywrightCrawler:
                             tenant_id=tenant_id,
                             business_id=business_id,
                         )
-                    except Exception as exc:  # noqa: BLE001 — Playwright raises lots
+                    except Exception as exc:
                         log.warning("crawler.fetch_failed", url=current, error=str(exc)[:200])
                         continue
 
@@ -201,14 +202,14 @@ class PlaywrightCrawler:
             try:
                 await page.screenshot(path=str(shot), full_page=True)
                 screenshot_path = str(shot)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.warning("crawler.screenshot_failed", url=url, error=str(exc)[:200])
 
         # Pull href attributes from anchors for the queue.
         try:
             link_handles = await page.locator("a[href]").all()
             raw_links = [await h.get_attribute("href") for h in link_handles]
-        except Exception:  # noqa: BLE001
+        except Exception:
             raw_links = []
         abs_links: list[str] = []
         for href in raw_links:
@@ -234,6 +235,7 @@ class PlaywrightCrawler:
 
 
 # ---- test fake (kept here so tests using the orchestrator don't need a real browser)
+
 
 class FakeCrawler:
     """In-process fake — yields a fixed list of RawArtifacts. Useful for

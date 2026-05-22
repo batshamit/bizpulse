@@ -20,16 +20,20 @@ from mcp.server.fastmcp import FastMCP
 from bizpulse import __version__
 from bizpulse.mcp import tools as _t
 
-mcp = FastMCP(name="bizpulse", instructions=(
-    "BizPulse — multi-agent RAG marketing-strategy platform. "
-    "Use register_tenant first to obtain an api_key, then register_business, "
-    "then analyze_business. Use query_business_knowledge for grounded RAG "
-    "queries against a tenant's knowledge base."
-))
+mcp = FastMCP(
+    name="bizpulse",
+    instructions=(
+        "BizPulse — multi-agent RAG marketing-strategy platform. "
+        "Use register_tenant first to obtain an api_key, then register_business, "
+        "then analyze_business. Use query_business_knowledge for grounded RAG "
+        "queries against a tenant's knowledge base."
+    ),
+)
 
 
 # Decorate each tool. Keeping the signatures explicit (rather than **kwargs)
 # so MCP clients see proper type hints in their tool catalog.
+
 
 @mcp.tool()
 def register_tenant(name: str, slug: str | None = None) -> dict[str, Any]:
@@ -68,9 +72,11 @@ def list_businesses(api_key: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-def analyze_business(api_key: str, business_id: str) -> dict[str, Any]:
+async def analyze_business(
+    api_key: str, business_id: str, num_llms: int | None = None
+) -> dict[str, Any]:
     """Kick off the multi-agent pipeline for a business; returns a pending RunRecord."""
-    return _t.analyze_business(api_key=api_key, business_id=business_id)
+    return await _t.analyze_business(api_key=api_key, business_id=business_id, num_llms=num_llms)
 
 
 @mcp.tool()
@@ -86,14 +92,14 @@ def list_runs_for_business(api_key: str, business_id: str) -> list[dict[str, Any
 
 
 @mcp.tool()
-def query_business_knowledge(
+async def query_business_knowledge(
     api_key: str,
     business_id: str,
     question: str,
     top_k: int = 8,
 ) -> dict[str, Any]:
-    """Hybrid-search a business's vector store. (Phase 8 stub — needs TEI running.)"""
-    return _t.query_business_knowledge(
+    """Hybrid-search a business's vector store."""
+    return await _t.query_business_knowledge(
         api_key=api_key,
         business_id=business_id,
         question=question,
@@ -102,13 +108,13 @@ def query_business_knowledge(
 
 
 @mcp.tool()
-def get_marketing_recommendations(
+async def get_marketing_recommendations(
     api_key: str,
     business_id: str,
     channel: str | None = None,
 ) -> dict[str, Any]:
-    """Channel-scoped marketing recommendations. (Pending Phase-6 pipeline.)"""
-    return _t.get_marketing_recommendations(
+    """Channel-scoped marketing recommendations."""
+    return await _t.get_marketing_recommendations(
         api_key=api_key,
         business_id=business_id,
         channel=channel,
@@ -120,4 +126,4 @@ def main() -> None:
     mcp.run()
 
 
-__all__ = ["mcp", "main", "__version__"]
+__all__ = ["__version__", "main", "mcp"]

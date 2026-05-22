@@ -54,18 +54,24 @@ def runner_with_chunks(tmp_path: Path) -> AgentRunner:
         source_type="about_page",
         content_hash="abcdef0123456789",
     )
-    repo.upsert([
-        EmbeddedChunk(
-            chunk=Chunk(text="We build a neobank for gig workers.", metadata=meta),
-            vector=[1.0, 0.0, 0.0, 0.0],
-            embed_model="fake", embed_dim=4,
-        ),
-        EmbeddedChunk(
-            chunk=Chunk(text="Pricing: ₹0 monthly, in-app foreign-exchange margin.", metadata=meta),
-            vector=[0.0, 1.0, 0.0, 0.0],
-            embed_model="fake", embed_dim=4,
-        ),
-    ])
+    repo.upsert(
+        [
+            EmbeddedChunk(
+                chunk=Chunk(text="We build a neobank for gig workers.", metadata=meta),
+                vector=[1.0, 0.0, 0.0, 0.0],
+                embed_model="fake",
+                embed_dim=4,
+            ),
+            EmbeddedChunk(
+                chunk=Chunk(
+                    text="Pricing: ₹0 monthly, in-app foreign-exchange margin.", metadata=meta
+                ),
+                vector=[0.0, 1.0, 0.0, 0.0],
+                embed_model="fake",
+                embed_dim=4,
+            ),
+        ]
+    )
     retrieval = RetrievalEngine(repo, embedder=_FakeEmbedder())
     judge = FakeLLMClient(
         name="judge",
@@ -108,8 +114,8 @@ async def test_repair_path_recovers_from_bad_json(tmp_path: Path) -> None:
         name="judge",
         vendor="fake",
         responses=[
-            "broken{not-json",                                                # initial debate
-            '{"summary": "repaired", "confidence": 0.5}',                     # repair call
+            "broken{not-json",  # initial debate
+            '{"summary": "repaired", "confidence": 0.5}',  # repair call
         ],
     )
     member = FakeLLMClient(name="m", vendor="fake", response='{"summary": "x", "confidence": 0.1}')
@@ -147,6 +153,7 @@ async def test_repair_failure_raises_agent_run_error(tmp_path: Path) -> None:
 
 
 # ---- extract_json ----------------------------------------------------------
+
 
 def test_extract_json_direct() -> None:
     assert extract_json('{"a": 1}') == {"a": 1}

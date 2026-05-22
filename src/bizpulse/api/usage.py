@@ -48,9 +48,7 @@ class UsageReport(BaseModel):
 
 def _build_usage(*, tenant: Tenant, store: Store) -> UsageReport:
     effective = (
-        tenant.daily_limit_override
-        if tenant.daily_limit_override is not None
-        else daily_limit()
+        tenant.daily_limit_override if tenant.daily_limit_override is not None else daily_limit()
     )
     window_start = utcnow() - timedelta(hours=24)
     runs_today = store.count_runs_for_tenant_since(tenant.id, window_start)
@@ -79,6 +77,7 @@ def usage(
 
 # ---- rate-limit dependency for POST /analyze ----------------------------
 
+
 def enforce_daily_limit(
     tenant: Tenant = Depends(require_tenant),
     store: Store = Depends(get_store),
@@ -92,14 +91,10 @@ def enforce_daily_limit(
     if tenant.suspended:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "Tenant is suspended. Contact the operator to reactivate."
-            ),
+            detail=("Tenant is suspended. Contact the operator to reactivate."),
         )
     effective = (
-        tenant.daily_limit_override
-        if tenant.daily_limit_override is not None
-        else daily_limit()
+        tenant.daily_limit_override if tenant.daily_limit_override is not None else daily_limit()
     )
     if effective == 0:
         return tenant  # quota disabled

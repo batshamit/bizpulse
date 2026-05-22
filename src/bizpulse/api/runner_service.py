@@ -24,21 +24,23 @@ import hashlib
 import os
 import re
 import tempfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from qdrant_client import QdrantClient
 
 from bizpulse.agents import AgentRunner, Council
 from bizpulse.agents.graph import build_analysis_graph
+from bizpulse.config import settings
 from bizpulse.ingest import IngestionPipeline
 from bizpulse.ingest.crawler import PlaywrightCrawler
-from bizpulse.llm.factory import build_clients
-from bizpulse.llm.openai_compat import GroqClient, MistralClient, OpenRouterClient
+from bizpulse.llm.factory import ollama_chat_client
+from bizpulse.llm.openai_compat import groq_client, mistral_client, openrouter_client
 from bizpulse.logging import get_logger
 from bizpulse.models import Business, RawArtifact
-from bizpulse.retrieval import GeminiEmbedder, RetrievalEngine, TenantQdrant
+from bizpulse.retrieval import GeminiEmbedder, OllamaEmbeddings, RetrievalEngine, TenantQdrant
 from bizpulse.storage import Store, get_default_store
 
 log = get_logger(__name__)
@@ -63,7 +65,7 @@ class _HashEmbedder:
             vec: list[float] = []
             for byte in h[:64]:
                 v = byte / 255.0
-                vec.extend([v, v ** 0.5, 1 - v, v * 2 - 1] * 3)
+                vec.extend([v, v**0.5, 1 - v, v * 2 - 1] * 3)
             out.append(vec[:768])
         return out
 
@@ -86,7 +88,7 @@ class _SafeEmbedder:
             return await self.fallback.embed(texts)
         try:
             return await self.primary.embed(texts)
-        except Exception as exc:  # noqa: BLE001 — vendor SDKs raise heterogeneously
+        except Exception as exc:
             log.warning(
                 "runner.embedder.primary_failed_falling_back",
                 primary=self.model,
@@ -99,49 +101,59 @@ class _SafeEmbedder:
 
 
 def _pick_embedder():
-    """Wraps a Gemini embedder with a hash-embedder fallback so a Gemini
-    outage / model rename doesn't take the whole run down."""
+    """Pick the best available embedder with a hash fallback.
+    Order: Ollama (if configured) -> Gemini (if key set) -> Hash fallback."""
     fallback = _HashEmbedder()
+
+    # Check for Ollama (using port 11434 as a hint or if explicitly configured)
+    if "11434" in settings.embed_base_url or "ollama" in settings.embed_model.lower():
+        try:
+            return _SafeEmbedder(primary=OllamaEmbeddings(), fallback=fallback)
+        except Exception as exc:
+            log.warning("runner.embedder.ollama_init_failed", error=str(exc)[:200])
+
     if os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"):
         try:
             return _SafeEmbedder(primary=GeminiEmbedder(), fallback=fallback)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("runner.embedder.gemini_init_failed", error=str(exc)[:200])
     return fallback
 
 
-def _pick_council() -> Council | None:
-    """Build a free-tier-safe single-vendor council.
+def _pick_council(num_llms: int | None = None) -> Council | None:
+    """Build a council preferring local Ollama if available, then fallback vendors."""
+    by_vendor: dict[str, Callable[[], Any]] = {}
 
-    We deliberately pick ONE member here (not the multi-vendor debate
-    council) because the graph runs 6 agents back-to-back and even
-    sequential execution can exhaust a free-tier vendor's burst quota
-    when `rounds>1`. Vendor preference (most reliable -> least):
-      mistral-small  : shared free pool, generous TPM
-      gemini-2.5-flash: 5 RPM hard cap, but high TPM/call
-      groq           : 12K TPM cap, OK for a couple agents
-      openrouter     : depends on user credits ($)
+    # Try Ollama first as it's local and cost-free
+    if "11434" in settings.llm_base_url:
+        by_vendor["ollama"] = lambda: ollama_chat_client()
 
-    The fallback judge is a different vendor if available."""
-    by_vendor: dict[str, callable] = {}
     if os.environ.get("MISTRAL_API_KEY"):
-        by_vendor["mistral"] = lambda: MistralClient(model="mistral-small-latest")
+        by_vendor["mistral"] = lambda: mistral_client(model="mistral-small-latest")
     if os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"):
         from bizpulse.llm.gemini_client import GeminiClient
+
         by_vendor["google"] = lambda: GeminiClient(model="gemini-2.5-flash")
     if os.environ.get("GROQ_API_KEY"):
-        by_vendor["groq"] = lambda: GroqClient(model="llama-3.3-70b-versatile")
+        by_vendor["groq"] = lambda: groq_client(model="llama-3.3-70b-versatile")
     if os.environ.get("OPENROUTER_API_KEY"):
-        by_vendor["openrouter"] = lambda: OpenRouterClient(model="anthropic/claude-haiku-4-5")
+        by_vendor["openrouter"] = lambda: openrouter_client(model="anthropic/claude-haiku-4-5")
 
     if not by_vendor:
         return None
 
-    # Pick primary in preference order.
-    for v in ("mistral", "google", "groq", "openrouter"):
-        if v in by_vendor:
-            primary = by_vendor[v]()
-            break
+    # Pick up to num_llms available vendors in preference order
+    available_vendors = ["ollama", "mistral", "google", "groq", "openrouter"]
+    selected_vendors = [v for v in available_vendors if v in by_vendor]
+
+    if num_llms is not None and num_llms > 0:
+        selected_vendors = selected_vendors[:num_llms]
+
+    members = [by_vendor[v]() for v in selected_vendors]
+    if not members:
+        return None
+
+    primary = members[0]
 
     # Pick fallback judge from a different vendor if any.
     fallback = None
@@ -153,14 +165,16 @@ def _pick_council() -> Council | None:
             except Exception:
                 continue
 
+    rounds = 2 if len(members) > 1 else 1
+
     return Council(
-        members=[primary],
+        members=members,
         judge=primary,
         fallback_judge=fallback,
-        rounds=1,
+        rounds=rounds,
         # 3072 gives MarketingStrategy (the biggest schema) room to fit + a
         # repair pass; smaller schemas use fewer tokens and don't pay extra.
-        max_tokens=3072,
+        max_tokens=4096,
     )
 
 
@@ -192,7 +206,7 @@ async def _invoke_graph_with_retry(graph, initial_state):
     for attempt in range(1 + len(_RETRY_BACKOFFS_SEC)):
         try:
             return await graph.ainvoke(initial_state)
-        except Exception as exc:  # noqa: BLE001 — graph wraps many vendors
+        except Exception as exc:
             last_exc = exc
             msg = str(exc)
             transient = bool(_TRANSIENT_RE.search(msg))
@@ -231,7 +245,7 @@ async def _try_crawl(url: str, tenant_id: UUID, business_id: UUID) -> list[RawAr
         await asyncio.wait_for(_collect(), timeout=45.0)
     except asyncio.TimeoutError:
         log.warning("runner.crawl.timeout", url=url, partial=len(artifacts))
-    except Exception as exc:  # noqa: BLE001 — Playwright raises many types
+    except Exception as exc:
         log.warning("runner.crawl.failed", url=url, error=str(exc)[:200])
     return artifacts
 
@@ -259,12 +273,26 @@ def _synthetic_artifact(business: Business) -> RawArtifact:
     )
 
 
+def _user_context_artifact(business: Business, context: str) -> RawArtifact:
+    """Wraps user-provided context (policies, extra reports) as a RawArtifact."""
+    return RawArtifact(
+        tenant_id=business.tenant_id,
+        business_id=business.id,
+        source_url=f"{business.url}/#user-context",
+        source_type="user_context",
+        content_hash=RawArtifact.hash_text(context),
+        extracted_text=context,
+    )
+
+
 async def run_analysis_background(
     *,
     run_id: UUID,
     business: Business,
     country: str = "IN",
     state: str | None = None,
+    additional_context: str | None = None,
+    num_llms: int | None = None,
 ) -> None:
     """Run the analysis pipeline in the background. Updates the run record
     in `get_default_store()` as it progresses."""
@@ -273,18 +301,20 @@ async def run_analysis_background(
     def _set(status: str, *, error: str | None = None) -> None:
         try:
             store.update_run_status(run_id, status, error=error)  # type: ignore[arg-type]
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("runner.set_status.failed", run_id=str(run_id), error=str(exc))
 
     log.info("runner.analyze.start", run_id=str(run_id), url=business.url)
-    council = _pick_council()
+    council = _pick_council(num_llms)
     if council is None:
         _set("failed", error="No LLM API keys available — set at least one vendor key in .env.")
         return
 
-    # 1. Crawl.
+    # 1. Crawl + Additional Context.
     _set("ingesting")
     artifacts = await _try_crawl(business.url, business.tenant_id, business.id)
+    if additional_context:
+        artifacts.append(_user_context_artifact(business, additional_context))
     if not artifacts:
         artifacts = [_synthetic_artifact(business)]
 
@@ -297,7 +327,7 @@ async def run_analysis_background(
     pipe = IngestionPipeline(repo, embedder, industry=business.industry, batch_size=24)
     try:
         await pipe.ingest(artifacts)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("runner.ingest.failed", error=str(exc)[:300])
         _set("failed", error=f"ingest failed: {exc}")
         return
@@ -323,7 +353,7 @@ async def run_analysis_background(
     }
     try:
         final = await _invoke_graph_with_retry(graph, initial_state)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("runner.graph.failed", error=str(exc)[:300])
         _set("failed", error=f"graph invocation failed: {exc}")
         return
@@ -338,11 +368,13 @@ async def run_analysis_background(
     # 4. Attach compliance + agent_traces to the strategy + persist.
     traces = final.get("agent_traces") or []
     try:
-        strategy = strategy.model_copy(update={
-            "compliance_report": compliance,
-            "agent_traces": traces,
-        })
-    except Exception as exc:  # noqa: BLE001
+        strategy = strategy.model_copy(
+            update={
+                "compliance_report": compliance,
+                "agent_traces": traces,
+            }
+        )
+    except Exception as exc:
         log.warning("runner.merge_failed", error=str(exc)[:200])
 
     _persist_final_output(store=store, run_id=run_id, strategy=strategy)
@@ -355,7 +387,7 @@ async def run_analysis_background(
             output_tokens=runner.cumulative_output_tokens,
             llm_calls=runner.cumulative_llm_calls,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("runner.usage.persist_failed", error=str(exc)[:200])
     _set("complete")
     log.info(
@@ -382,6 +414,7 @@ def _persist_final_output(*, store: Store, run_id: UUID, strategy) -> None:
     # In-memory: replace the dict entry directly.
     try:
         from bizpulse.storage.memory import InMemoryStore
+
         if isinstance(store, InMemoryStore):
             updated = run.model_copy(update={"final_output": strategy})
             # Internal: just rewrite the dict slot.
@@ -393,6 +426,7 @@ def _persist_final_output(*, store: Store, run_id: UUID, strategy) -> None:
     # Postgres: write into runs.output JSONB.
     try:
         from bizpulse.storage.postgres import PostgresStore
+
         if isinstance(store, PostgresStore):
             with store._pool.connection() as conn, conn.cursor() as cur:  # type: ignore[attr-defined]
                 cur.execute(
@@ -400,5 +434,5 @@ def _persist_final_output(*, store: Store, run_id: UUID, strategy) -> None:
                     (strategy.model_dump_json(), str(run_id)),
                 )
             return
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("runner.persist.failed", error=str(exc)[:200])

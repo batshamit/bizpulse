@@ -7,20 +7,21 @@ analytical statement whose citations don't trace back to real chunks.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
 from bizpulse.models.agents import AgentTrace
 from bizpulse.models.citations import Citation, _coerce_chunk_id
 from bizpulse.models.common import BusinessId, ChunkId, StrictModel, TenantId
-from bizpulse.models.compliance import ComplianceReport
+from bizpulse.models.compliance import ComplianceReport, LLLLMetric
 
 ChannelSlug = Literal[
     "google_search",
     "linkedin",
     "youtube",
     "twitter",
+    "threads",
     "instagram",
     "facebook",
     "podcast",
@@ -37,6 +38,21 @@ Priority = Literal["P0", "P1", "P2"]
 
 
 # --- per-section analyses -----------------------------------------------------
+
+
+class DetailedChannelStrategy(StrictModel):
+    """Deep-dive strategy for a specific channel."""
+
+    channel: ChannelSlug
+    strategy_details: str = Field(
+        min_length=1, description="Detailed tactical plan for this channel."
+    )
+    key_metrics: list[str] = Field(
+        default_factory=list, description="Specific KPIs to track for this channel."
+    )
+    implementation_steps: list[str] = Field(default_factory=list)
+    citations: list[Citation] = Field(min_length=1)
+
 
 class BrandAnalysis(StrictModel):
     positioning: str = Field(min_length=1)
@@ -62,6 +78,11 @@ class AudienceAnalysis(StrictModel):
 class Competitor(StrictModel):
     name: str = Field(min_length=1)
     url: str = Field(min_length=4)
+    linkedin_url: str | None = Field(default=None, description="LinkedIn company page URL.")
+    social_media: dict[str, str] = Field(
+        default_factory=dict,
+        description="Map of platform names (youtube, instagram, etc.) to profile URLs.",
+    )
     positioning: str = Field(min_length=1)
     strengths: list[str] = Field(default_factory=list)
     weaknesses: list[str] = Field(default_factory=list)
@@ -94,6 +115,7 @@ class ContentAudit(StrictModel):
 
 # --- recommendations ----------------------------------------------------------
 
+
 class Recommendation(StrictModel):
     """One actionable marketing recommendation. Must cite chunk IDs."""
 
@@ -114,7 +136,7 @@ class Recommendation(StrictModel):
 
     @field_validator("evidence_chunk_ids", mode="before")
     @classmethod
-    def _lenient_evidence_ids(cls, v: object) -> list:
+    def _lenient_evidence_ids(cls, v: object) -> Any:
         """Coerce each evidence chunk_id leniently — same logic as Citation.
         Truncated / hallucinated IDs map to the UNKNOWN sentinel; the Critic
         agent flags them. Empty list after coercion is still rejected by
@@ -136,6 +158,7 @@ class Recommendation(StrictModel):
 
 # --- final strategy -----------------------------------------------------------
 
+
 class MarketingStrategy(StrictModel):
     """The end-to-end output of one BizPulse run — what gets returned to the
     caller, persisted in Postgres, and exposed via the MCP server.
@@ -156,8 +179,20 @@ class MarketingStrategy(StrictModel):
     competitive_landscape: CompetitiveLandscape | None = None
     content_audit: ContentAudit | None = None
     recommendations: list[Recommendation] = Field(min_length=1)
+    detailed_channel_strategies: list[DetailedChannelStrategy] = Field(
+        default_factory=list,
+        description="In-depth tactical breakdowns for key channels like LinkedIn, Social, Search, etc.",
+    )
+    inclusivity_metrics: LLLLMetric | None = Field(
+        default=None,
+        description="The 4 L's (Last, Least, Lost, Lowest) metrics for the strategy.",
+    )
     overall_confidence: float = Field(ge=0.0, le=1.0)
     summary: str = Field(min_length=1, description="3-5 sentence executive summary.")
+    benefit_report: str = Field(
+        default="",
+        description="Detailed report on how this strategy is specifically beneficial for the company.",
+    )
     compliance_report: ComplianceReport | None = Field(
         default=None,
         description="Attached by the compliance_checker agent after synthesis. None when compliance was skipped.",

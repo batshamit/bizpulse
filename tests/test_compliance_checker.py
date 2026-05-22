@@ -17,8 +17,8 @@ from bizpulse.models import (
     AudiencePersona,
     BrandAnalysis,
     Citation,
-    Competitor,
     CompetitiveLandscape,
+    Competitor,
     ContentAudit,
     MarketingStrategy,
     Recommendation,
@@ -29,34 +29,47 @@ from bizpulse.models.compliance import ComplianceReport
 def _strategy() -> MarketingStrategy:
     cid = uuid4()
     return MarketingStrategy(
-        tenant_id=uuid4(), business_id=uuid4(), industry="real_estate",
+        tenant_id=uuid4(),
+        business_id=uuid4(),
+        industry="real_estate",
         brand=BrandAnalysis(
-            positioning="Luxury residential builder", tone="trustworthy",
+            positioning="Luxury residential builder",
+            tone="trustworthy",
             value_props=["assured possession", "RERA-compliant"],
             citations=[Citation(chunk_id=cid)],
         ),
         audience=AudienceAnalysis(
             primary=AudiencePersona(
-                name="Upgrader", description="35-50yo metro family",
+                name="Upgrader",
+                description="35-50yo metro family",
                 citations=[Citation(chunk_id=cid)],
             ),
             citations=[Citation(chunk_id=cid)],
         ),
         competitive_landscape=CompetitiveLandscape(
-            competitors=[Competitor(
-                name="Lodha", url="https://lodhagroup.in",
-                positioning="luxury", verified=True,
-                citations=[Citation(chunk_id=cid)],
-            )],
+            competitors=[
+                Competitor(
+                    name="Lodha",
+                    url="https://lodhagroup.in",
+                    positioning="luxury",
+                    verified=True,
+                    citations=[Citation(chunk_id=cid)],
+                )
+            ],
             market_position="late entrant",
             citations=[Citation(chunk_id=cid)],
         ),
         content_audit=ContentAudit(),
-        recommendations=[Recommendation(
-            channel="instagram", action="Post 'guaranteed possession in 18 months' Reels",
-            rationale="Hooks the upgrade buyer", evidence_chunk_ids=[cid],
-            confidence=0.85, priority="P0",
-        )],
+        recommendations=[
+            Recommendation(
+                channel="instagram",
+                action="Post 'guaranteed possession in 18 months' Reels",
+                rationale="Hooks the upgrade buyer",
+                evidence_chunk_ids=[cid],
+                confidence=0.85,
+                priority="P0",
+            )
+        ],
         overall_confidence=0.82,
         summary="Lean into Reels.",
     )
@@ -94,7 +107,7 @@ def _canned_report_for_maharashtra() -> dict:
             },
         ],
         "metrics": {
-            "latest": 0.95,
+            "last": 0.95,
             "least": 0.35,
             "lost": 0.55,
             "lowest": 0.7,
@@ -122,7 +135,9 @@ async def test_run_compliance_check_happy_path() -> None:
     assert isinstance(report, ComplianceReport)
     assert report.country == "IN"
     assert report.state == "maharashtra"
-    assert any(f.policy_slug == "rera-maharashtra" and f.severity == "violation" for f in report.flags)
+    assert any(
+        f.policy_slug == "rera-maharashtra" and f.severity == "violation" for f in report.flags
+    )
     assert report.metrics.average == pytest.approx((0.95 + 0.35 + 0.55 + 0.7) / 4)
     assert report.overall_compliance_score == 0.45
     assert any(c.competitor_name == "Lodha" for c in report.competitor_compare)

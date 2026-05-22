@@ -39,7 +39,6 @@ from bizpulse.models import (
 )
 from bizpulse.retrieval import RetrievalEngine, TenantQdrant
 
-
 SCHEMAS = {
     "brand_analyst": BrandAnalysis,
     "audience_analyst": AudienceAnalysis,
@@ -55,19 +54,17 @@ class HashEmbedder:
     model = "hash-embed"
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        return [
-            [b / 255 for b in hashlib.sha256(t.encode()).digest()[:4]]
-            for t in texts
-        ]
+        return [[b / 255 for b in hashlib.sha256(t.encode()).digest()[:4]] for t in texts]
 
 
 async def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("--golden", default="fintech/neobank_v1.json",
-                   help="path under tests/eval/golden/")
-    p.add_argument("--agent", default="brand_analyst",
-                   choices=list(SCHEMAS),
-                   help="which analyst to run")
+    p.add_argument(
+        "--golden", default="fintech/neobank_v1.json", help="path under tests/eval/golden/"
+    )
+    p.add_argument(
+        "--agent", default="brand_analyst", choices=list(SCHEMAS), help="which analyst to run"
+    )
     p.add_argument("--top-k", type=int, default=4)
     args = p.parse_args()
 
@@ -91,21 +88,24 @@ async def main() -> None:
     text = "\n\n".join(c.text for c in g.chunks)
     embedder = HashEmbedder()
     pipe = IngestionPipeline(repo, embedder, industry=g.industry)
-    n_chunks = await pipe.ingest([
-        RawArtifact(
-            tenant_id=repo.tenant_id,
-            business_id=uuid4(),
-            source_url=g.business_url,
-            source_type="website_page",
-            content_hash=RawArtifact.hash_text(text),
-            extracted_text=text,
-        )
-    ])
+    n_chunks = await pipe.ingest(
+        [
+            RawArtifact(
+                tenant_id=repo.tenant_id,
+                business_id=uuid4(),
+                source_url=g.business_url,
+                source_type="website_page",
+                content_hash=RawArtifact.hash_text(text),
+                extracted_text=text,
+            )
+        ]
+    )
     print(f"[ingest]  {n_chunks} chunks indexed for golden {g.id!r}")
 
     # Run.
-    runner = AgentRunner(retrieval=RetrievalEngine(repo, embedder=embedder),
-                         council=council, industry=g.industry)
+    runner = AgentRunner(
+        retrieval=RetrievalEngine(repo, embedder=embedder), council=council, industry=g.industry
+    )
     schema = SCHEMAS[args.agent]
 
     task = next(

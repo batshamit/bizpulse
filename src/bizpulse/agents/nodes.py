@@ -13,9 +13,8 @@ Node responsibilities:
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-
 import time
+from typing import Any
 
 from bizpulse.agents.runner import AgentRunError, AgentRunner
 from bizpulse.agents.state import AnalysisState
@@ -32,7 +31,7 @@ from bizpulse.models.common import utcnow
 
 log = get_logger(__name__)
 
-NodeFn = Callable[[AnalysisState], Awaitable[dict[str, object]]]
+NodeFn = Any
 
 
 def _record_repair(state_update: dict, agent: str, repaired: bool) -> dict:
@@ -73,14 +72,22 @@ def _node_wrap(agent_name, fn):
         t0 = time.perf_counter()
         try:
             result = await fn(state)
-        except Exception as exc:  # noqa: BLE001 — node bodies catch their own
+        except Exception as exc:
             result = {"errors": [f"{agent_name}: {exc}"]}
         trace = _trace(
             agent=agent_name,
             started_ms=t0,
-            status="failed" if (result.get("errors") and any(agent_name in e for e in result["errors"])) else "ok",
+            status=(
+                "failed"
+                if (result.get("errors") and any(agent_name in e for e in result["errors"]))
+                else "ok"
+            ),
             error=None,
-            retries=1 if state.get("repair_attempts") and agent_name in state.get("repair_attempts", []) else 0,
+            retries=(
+                1
+                if state.get("repair_attempts") and agent_name in state.get("repair_attempts", [])
+                else 0
+            ),
         )
         # Detect a failed-agent error embedded in this update.
         for e in result.get("errors", []) or []:
@@ -89,10 +96,12 @@ def _node_wrap(agent_name, fn):
                 break
         result.setdefault("agent_traces", []).append(trace)
         return result
+
     return wrapped
 
 
 # ---- analytical nodes ----------------------------------------------------
+
 
 def _make_analyst(
     *,
@@ -140,7 +149,9 @@ def _make_analyst(
                     "errors": [f"{agent_name}: {exc}"],
                     "agent_traces": [trace],
                 }
+
         return node
+
     return factory
 
 
@@ -148,12 +159,14 @@ make_brand_node = _make_analyst(
     agent_name="brand_analyst",
     task=(
         "Extract this business's brand positioning, tone, and 3 distinct "
-        "value propositions. Cite chunk_ids. Be SPECIFIC to this exact "
-        "business — pull the unique-to-them numbers, names, partner brands, "
-        "regulatory licenses, awards, milestones. Generic statements that "
-        "could apply to any company in the industry are NOT useful."
+        "value propositions. Cite chunk_ids. Be ULTRA-SPECIFIC. "
+        "Ignore generic industry patterns. Instead, hunt for the unique "
+        "identifiers: specific project names, exact interest rates, partner "
+        "logos, regulatory licenses (e.g. SEBI/RBI/RERA numbers), unique "
+        "vocabulary used in their UI, and specific founder quotes. "
+        "If 'user_context' chunks are present, prioritize them as ground truth."
     ),
-    query_text="brand positioning tone value propositions company milestones",
+    query_text="brand positioning tone value propositions unique identifiers partners",
     output_schema=BrandAnalysis,
     state_key="brand",
 )
@@ -161,15 +174,19 @@ make_brand_node = _make_analyst(
 make_audience_node = _make_analyst(
     agent_name="audience_analyst",
     task=(
-        "Identify the primary ICP and meaningful secondary personas. For each, "
-        "cite chunk_ids that support the motivations and pain points. Surface "
-        "any *under-served* audiences hinted at in the content: late adopters / "
-        "newcomers (the LAST customer), minorities or accessibility-needs / "
-        "regional users (the LEAST-considered), churned or dormant cohorts (the "
-        "LOST), price-sensitive / entry-tier / financial-inclusion segments "
-        "(the LOWEST-budget). These will be scored by the compliance checker."
+        "Identify the primary ICP and meaningful secondary personas. Cite chunk_ids. "
+        "FOCUS on the '4 L's' from a CUSTOMER-BENEFIT perspective:\n"
+        "  1. LAST: Late adopters or those on waitlists—how does this business "
+        "     actually benefit them or remove their friction?\n"
+        "  2. LEAST: Under-served/minority/regional/rural groups—what unique "
+        "     benefit does this business offer them that competitors don't?\n"
+        "  3. LOST: Churned/lapsed users—why should they come back? What "
+        "     is the specific 'win-back' benefit or improvement for them?\n"
+        "  4. LOWEST: Price-sensitive/low-budget personas—how is this business "
+        "     making their life better affordably (financial inclusion)?\n"
+        "Citing specific evidence of these benefits is MANDATORY."
     ),
-    query_text="customer audience persona demographics pain points underserved minorities",
+    query_text="customer benefit audience persona 4L inclusivity",
     output_schema=AudienceAnalysis,
     state_key="audience",
 )
@@ -178,13 +195,14 @@ make_competitor_node = _make_analyst(
     agent_name="competitor_scout",
     task=(
         "Identify 3-5 SPECIFIC competitors of this business by name and URL. "
-        "Prefer competitors mentioned in the retrieved chunks; only invent "
-        "names if they're widely known in the industry. For each: name, url, "
-        "positioning, strengths, weaknesses. Set verified=true ONLY when the "
-        "competitor was visible in the retrieved context; otherwise leave it "
-        "false. No fabrication. Avoid listing the business itself."
+        "MANDATORY: For each competitor, hunt for their LinkedIn company page "
+        "URL and other social media presence (YouTube, Instagram, etc.). "
+        "Prefer competitors mentioned in the retrieved chunks. For each: name, "
+        "url, LinkedIn URL, positioning, strengths, weaknesses. "
+        "Set verified=true ONLY when the competitor was visible in the "
+        "retrieved context. No fabrication."
     ),
-    query_text="competitors market position alternatives mentioned in content",
+    query_text="competitors market position LinkedIn URL social media presence",
     output_schema=CompetitiveLandscape,
     state_key="competitive_landscape",
 )
@@ -216,31 +234,43 @@ def make_compliance_node(council) -> NodeFn:
             log.info("graph.compliance.skipped_no_strategy")
             return {
                 "compliance_report": None,
-                "agent_traces": [_trace(
-                    agent="compliance_checker", started_ms=t0,
-                    status="failed", error="skipped: no strategy",
-                )],
+                "agent_traces": [
+                    _trace(
+                        agent="compliance_checker",
+                        started_ms=t0,
+                        status="failed",
+                        error="skipped: no strategy",
+                    )
+                ],
             }
         country = state.get("country", "IN")
         st = state.get("state")
         try:
             report = await run_compliance_check(
-                council=council, strategy=strategy, country=country, state=st,
+                council=council,
+                strategy=strategy,
+                country=country,
+                state=st,
             )
             return {
                 "compliance_report": report,
                 "agent_traces": [_trace(agent="compliance_checker", started_ms=t0, status="ok")],
             }
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("graph.compliance.failed", error=str(exc)[:300])
             return {
                 "compliance_report": None,
                 "errors": [f"compliance_checker: {exc}"],
-                "agent_traces": [_trace(
-                    agent="compliance_checker", started_ms=t0,
-                    status="failed", error=str(exc)[:300],
-                )],
+                "agent_traces": [
+                    _trace(
+                        agent="compliance_checker",
+                        started_ms=t0,
+                        status="failed",
+                        error=str(exc)[:300],
+                    )
+                ],
             }
+
     return compliance
 
 
@@ -259,30 +289,46 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
             r = await runner.run(
                 agent="strategist",
                 task=(
-                    "Produce a SLIM MarketingStrategy specific to THIS business "
-                    "(do not output generic industry advice). Required fields:\n"
+                    "Produce a HIGH-USP, ULTRA-SPECIFIC MarketingStrategy for THIS business. "
+                    "Generic industry advice is a failure. Required fields:\n"
                     "  - tenant_id, business_id, industry (echo from input)\n"
                     "  - recommendations (3-7 prioritized items)\n"
+                    "  - detailed_channel_strategies (MANDATORY): Provide deep-dives as a LIST of objects. "
+                    "    Each object MUST have: 'channel' (the slug: 'linkedin', 'google_search', etc.), 'strategy_details' (text), "
+                    "    'key_metrics' (list of strings), 'implementation_steps' (list), "
+                    "    and 'citations' (list of citations). You MUST provide strategies for:\n"
+                    "      * linkedin (separate strategy focused on B2B/Thought-leadership)\n"
+                    "      * youtube or instagram (Social Media)\n"
+                    "      * google_search or email (Search & Direct)\n"
+                    "  - inclusivity_metrics (OPTIONAL): Score the '4 L's' (Last, Least, Lost, Lowest) "
+                    "    based on how this strategy serves those specific segments.\n"
+                    "  - benefit_report: A detailed, multi-paragraph corporate analysis explaining business ROI, "
+                    "    strategic value, and why this specific strategy is highly beneficial for OUR company.\n"
                     "  - overall_confidence (0..1)\n"
                     "  - summary (3-5 sentence executive overview)\n\n"
                     "Strategy quality bar:\n"
-                    "  * Every recommendation MUST reference a specific business "
-                    "    detail (a product name, partner, regulatory tier, prior "
-                    "    campaign motif, or competitor) lifted from the prior "
-                    "    summaries — generic 'post on LinkedIn' won't pass review.\n"
-                    "  * At least ONE recommendation should serve an UNDER-served "
-                    "    customer segment: late adopters, accessibility-needs / "
-                    "    vernacular-language users, lapsed / churned users, or the "
-                    "    lowest-budget tier (financial-inclusion / EMI / freemium).\n"
-                    "  * Recommendations include channel + specific action + "
-                    "    rationale + chunk_id citations from the prior summaries.\n\n"
+                    "  * All recommendations, channel strategies, and benefit reports MUST use a highly professional, "
+                    "    executive-ready, corporate-standard tone suitable for immediate presentation to C-level executives "
+                    "    and board members.\n"
+                    "  * Proactively align all recommendations and strategies with applicable regulations and policies "
+                    "    such as RBI/SEBI digital lending and investment guidelines (for financial/fintech products), "
+                    "    RERA (for real estate/proptech), DPDP/GDPR (for user data privacy and protection). Ensure that any "
+                    "    proposed actions are structured to prevent compliance or regulatory violations.\n"
+                    "  * Every recommendation and channel strategy MUST reference a specific "
+                    "    business detail lifted from the prior summaries or context.\n"
+                    "  * Take special help from the LinkedIn pages and competitor mentions "
+                    "    found in the retrieved context to collect data on their tactics.\n"
+                    "  * Each recommendation MUST include a CUSTOMER BENEFIT target, "
+                    "    explicitly addressing one of the '4 L's'.\n"
+                    "  * Citations MUST use the exact 'chunk_id' (valid UUID) from the retrieved chunks. "
+                    "    Do NOT invent or shorten chunk_ids.\n\n"
                     "Set `brand`, `audience`, `competitive_landscape`, `content_audit` "
                     "to null — they're merged from prior outputs after you return.\n\n"
                     f"Prior agent outputs (summarized):\n{prior}"
                 ),
                 output_schema=MarketingStrategy,
-                query_text="marketing strategy recommendations channels priorities",
-                top_k=3,
+                query_text="detailed marketing strategy LinkedIn social media YouTube Instagram Facebook X Threads Google Search WhatsApp B2B Email 4L benefits",
+                top_k=8,
             )
             # Merge the prior analyst outputs back into the strategy so the
             # final report carries the full structure even though the LLM
@@ -291,15 +337,19 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
             # sometimes emits the long form ("Financial Technology") which
             # breaks downstream policy lookup keyed on the slug.
             canonical_industry = state.get("industry") or r.output.industry
-            merged = r.output.model_copy(update={
-                "industry": canonical_industry,
-                "brand": state.get("brand") or r.output.brand,
-                "audience": state.get("audience") or r.output.audience,
-                "competitive_landscape": state.get("competitive_landscape") or r.output.competitive_landscape,
-                "content_audit": state.get("content_audit") or r.output.content_audit,
-            })
+            merged = r.output.model_copy(
+                update={
+                    "industry": canonical_industry,
+                    "brand": state.get("brand") or r.output.brand,
+                    "audience": state.get("audience") or r.output.audience,
+                    "competitive_landscape": state.get("competitive_landscape")
+                    or r.output.competitive_landscape,
+                    "content_audit": state.get("content_audit") or r.output.content_audit,
+                }
+            )
             trace = _trace(
-                agent="strategist", started_ms=t0,
+                agent="strategist",
+                started_ms=t0,
                 status="ok",
                 retries=1 if r.repair_attempted else 0,
             )
@@ -313,15 +363,21 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
             return {
                 "final_strategy": None,
                 "errors": [f"strategist: {exc}"],
-                "agent_traces": [_trace(
-                    agent="strategist", started_ms=t0,
-                    status="failed", error=str(exc)[:300],
-                )],
+                "agent_traces": [
+                    _trace(
+                        agent="strategist",
+                        started_ms=t0,
+                        status="failed",
+                        error=str(exc)[:300],
+                    )
+                ],
             }
+
     return strategist
 
 
 # ---- helpers -------------------------------------------------------------
+
 
 def _summarize_prior_compact(state: AnalysisState) -> str:
     """Tight text summary of prior agent outputs — designed to fit even a
@@ -355,10 +411,7 @@ def _summarize_prior_compact(state: AnalysisState) -> str:
         )
 
     if (c := state.get("competitive_landscape")) is not None:
-        names = ", ".join(
-            f"{cm.name} ({cm.url})"
-            for cm in c.competitors[:5]
-        )
+        names = ", ".join(f"{cm.name} ({cm.url})" for cm in c.competitors[:5])
         ids = ",".join(str(ci.chunk_id) for ci in c.citations[:5])
         parts.append(
             "COMPETITORS:\n"

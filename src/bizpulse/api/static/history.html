@@ -20,6 +20,7 @@
       <a href="/ui/dashboard.html">Dashboard</a>
       <a href="/ui/new-report.html">New report</a>
       <a href="/ui/history.html" class="active">History</a>
+      <a href="/ui/about.html">About</a>
       <span x-show="tenant" style="color:var(--bzp-ink-faint); margin-left:1.5rem; font-size:0.85rem;" x-text="tenant?.name"></span>
       <a href="#" @click.prevent="logout()" style="margin-left:0.8rem; color:var(--bzp-ink-soft);">Sign out</a>
     </div>
@@ -50,6 +51,7 @@
           <th>Industry</th>
           <th>Started</th>
           <th>Status</th>
+          <th>Cost</th>
           <th></th>
         </tr></thead>
         <tbody>
@@ -59,6 +61,7 @@
               <td style="color:var(--bzp-ink-soft);" x-text="bizIndustry(r.business_id)"></td>
               <td style="color:var(--bzp-ink-soft);" x-text="fmtTime(r.started_at)"></td>
               <td><span x-html="statusPill(r.status)"></span></td>
+              <td style="color:var(--bzp-ink-soft);" x-text="fmtCurrency(r.total_cost_usd)"></td>
               <td style="text-align:right;">
                 <a :href="`/ui/report.html?run=${r.id}`" class="bzp-btn bzp-btn-ghost" style="padding:0.4rem 0.85rem; font-size:0.85rem;">Open →</a>
               </td>

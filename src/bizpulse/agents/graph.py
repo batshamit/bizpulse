@@ -61,34 +61,33 @@ def build_analysis_graph(
     # without it.
     from langgraph.graph import END, START, StateGraph
 
-    g: StateGraph = StateGraph(AnalysisState)
+    g = StateGraph(AnalysisState)
 
     g.add_node("brand_analyst", make_brand_node(runner))
     g.add_node("audience_analyst", make_audience_node(runner))
     g.add_node("competitor_scout", make_competitor_node(runner))
     g.add_node("content_auditor", make_content_node(runner))
     g.add_node("strategist", make_strategist_node(runner))
-    g.add_node("compliance_checker",
-               make_compliance_node(compliance_council or runner.council))
+    g.add_node("compliance_checker", make_compliance_node(compliance_council or runner.council))
 
     if sequential:
         # Free-tier-friendly: chain everyone end-to-end so we never have two
         # simultaneous LLM calls on the same vendor.
         g.add_edge(START, "brand_analyst")
-        g.add_edge("brand_analyst",     "audience_analyst")
-        g.add_edge("audience_analyst",  "competitor_scout")
-        g.add_edge("competitor_scout",  "content_auditor")
-        g.add_edge("content_auditor",   "strategist")
+        g.add_edge("brand_analyst", "audience_analyst")
+        g.add_edge("audience_analyst", "competitor_scout")
+        g.add_edge("competitor_scout", "content_auditor")
+        g.add_edge("content_auditor", "strategist")
     else:
         # Parallel: 4 analysts fan out from START, re-converge at strategist.
         g.add_edge(START, "brand_analyst")
         g.add_edge(START, "audience_analyst")
         g.add_edge(START, "competitor_scout")
         g.add_edge(START, "content_auditor")
-        g.add_edge("brand_analyst",     "strategist")
-        g.add_edge("audience_analyst",  "strategist")
-        g.add_edge("competitor_scout",  "strategist")
-        g.add_edge("content_auditor",   "strategist")
+        g.add_edge("brand_analyst", "strategist")
+        g.add_edge("audience_analyst", "strategist")
+        g.add_edge("competitor_scout", "strategist")
+        g.add_edge("content_auditor", "strategist")
 
     # Compliance audit always last.
     g.add_edge("strategist", "compliance_checker")

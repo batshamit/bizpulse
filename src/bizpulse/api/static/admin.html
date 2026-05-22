@@ -1,249 +1,302 @@
 <!doctype html>
-<html lang="en">
+<html lang='en'>
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
   <title>BizPulse — Admin</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/ui/css/app.css">
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
-  <script src="/ui/js/app.js"></script>
+  <link rel='preconnect' href='https://fonts.googleapis.com'>
+  <link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>
+  <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap' rel='stylesheet'>
+  <link rel='stylesheet' href='/ui/css/app.css'>
+  <script defer src='https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js'></script>
+  <script src='/ui/js/app.js'></script>
 </head>
 <body>
 
-<nav class="bzp-nav">
-  <div class="bzp-nav-inner">
-    <a href="/ui/admin.html" class="bzp-brand" style="text-decoration:none; color:var(--bzp-ink);">
-      BizPulse<span class="dot">.</span>
-      <span style="font-family:'Inter'; font-size:0.85rem; color:var(--bzp-accent); font-weight:500; margin-left:0.5rem; letter-spacing:0.04em; text-transform:uppercase;">admin</span>
+<nav class='bzp-nav'>
+  <div class='bzp-nav-inner'>
+    <a href='/ui/admin.html' class='bzp-brand' style='text-decoration:none; color:var(--bzp-ink);'>
+      BizPulse<span class='dot'>.</span>
+      <span style='font-family:"Inter"; font-size:0.85rem; color:var(--bzp-accent); font-weight:500; margin-left:0.5rem; letter-spacing:0.04em; text-transform:uppercase;'>admin</span>
     </a>
-    <div class="bzp-nav-links">
-      <a href="/ui/admin.html" class="active">Admin</a>
-      <a href="#" @click.prevent="document.dispatchEvent(new Event('admin:signout'))" x-show="localStorage.getItem('bizpulse.admin_key')" style="color:var(--bzp-ink-soft);">Sign out</a>
+    <div class='bzp-nav-links'>
+      <a href='/ui/admin.html' class='active'>Admin</a>
+      <a href='#' @click.prevent='document.dispatchEvent(new Event("admin:signout"))' x-show='localStorage.getItem("bizpulse.admin_key")' style='color:var(--bzp-ink-soft);'>Sign out</a>
     </div>
   </div>
 </nav>
 
-<div class="bzp-container" x-data="adminPage()" @admin:signout.window="signOut()">
+<div class='bzp-container' x-data='adminPage()' @admin:signout.window='signOut()'>
 
   <!-- LOGIN MODE -->
-  <template x-if="!authed">
-    <div style="max-width:480px; margin:5rem auto;">
-      <h1 class="bzp-page-title">Operator sign-in</h1>
-      <div class="bzp-page-subtitle">Enter your <code>BIZPULSE_ADMIN_KEY</code><span x-show="requiresTotp"> and a 6-digit TOTP code from your authenticator app</span>.</div>
-      <div class="bzp-card">
-        <form @submit.prevent="loginAdmin()" autocomplete="off">
-          <label class="bzp-label" for="adminKey">Admin key</label>
-          <input id="adminKey" x-model="adminKey" type="password" placeholder="..." class="bzp-input" required autofocus>
+  <template x-if='!authed'>
+    <div style='max-width:480px; margin:5rem auto;'>
+      <h1 class='bzp-page-title'>Operator sign-in</h1>
+      <div class='bzp-page-subtitle'>Enter your <code>BIZPULSE_ADMIN_KEY</code>.</div>
+      <div class='bzp-card'>
+        <form @submit.prevent='loginAdmin()' autocomplete='off'>
+          <label class='bzp-label' for='adminKey'>Admin key</label>
+          <input id='adminKey' x-model='adminKey' type='password' placeholder='...' class='bzp-input' required autofocus>
 
-          <template x-if="requiresTotp">
-            <div style="margin-top:1rem;">
-              <label class="bzp-label" for="totp">TOTP code <span style="color:var(--bzp-ink-faint); font-weight:400;">(6 digits)</span></label>
-              <input id="totp" x-model="totp" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="123456" class="bzp-input" required>
+          <template x-if='requiresTotp'>
+            <div style='margin-top:1rem;'>
+              <label class='bzp-label' for='totp'>TOTP code</label>
+              <input id='totp' x-model='totp' type='text' inputmode='numeric' maxlength='6' pattern='[0-9]{6}' placeholder='123456' class='bzp-input' required>
             </div>
           </template>
 
-          <button :disabled="busy" class="bzp-btn bzp-btn-primary" style="width:100%; margin-top:1.25rem; justify-content:center;">
-            <span x-show="!busy">Sign in →</span>
-            <span x-show="busy">Verifying…</span>
+          <button :disabled='busy' class='bzp-btn bzp-btn-primary' style='width:100%; margin-top:1.25rem; justify-content:center;'>
+            <span x-show='!busy'>Sign in →</span>
+            <span x-show='busy'>Verifying…</span>
           </button>
-          <div x-show="error" x-text="error" style="color:var(--bzp-danger); font-size:0.88rem; margin-top:0.9rem; text-align:center;"></div>
-          <div x-show="!enabled" style="color:var(--bzp-warning); font-size:0.85rem; margin-top:1rem; text-align:center;">
-            Admin endpoints disabled. Set <code>BIZPULSE_ADMIN_KEY</code> on the server.
-          </div>
+          <div x-show='error' x-text='error' style='color:var(--bzp-danger); font-size:0.88rem; margin-top:0.9rem; text-align:center;'></div>
         </form>
       </div>
     </div>
   </template>
 
   <!-- AUTHED MODE -->
-  <template x-if="authed">
+  <template x-if='authed'>
     <div>
-      <h1 class="bzp-page-title">Admin</h1>
-      <div class="bzp-page-subtitle">Operator view across every tenant.</div>
+      <h1 class='bzp-page-title'>Admin</h1>
+      <div class='bzp-page-subtitle'>Operator view across every tenant.</div>
 
-      <div class="bzp-grid-stats">
-        <div class="bzp-stat">
-          <div class="bzp-stat-label">Tenants</div>
-          <div class="bzp-stat-value" x-text="tenants.length"></div>
+      <div class='bzp-grid-stats'>
+        <div class='bzp-stat'>
+          <div class='bzp-stat-label'>Tenants</div>
+          <div class='bzp-stat-value' x-text='tenants.length'></div>
         </div>
-        <div class="bzp-stat">
-          <div class="bzp-stat-label">Active (24h)</div>
-          <div class="bzp-stat-value" x-text="tenants.filter(t => t.runs_today > 0).length"></div>
+        <div class='bzp-stat'>
+          <div class='bzp-stat-label'>Active (24h)</div>
+          <div class='bzp-stat-value' x-text='tenants.filter(t => t.runs_today > 0).length'></div>
         </div>
-        <div class="bzp-stat">
-          <div class="bzp-stat-label">Suspended</div>
-          <div class="bzp-stat-value" x-text="tenants.filter(t => t.suspended).length"></div>
-        </div>
-        <div class="bzp-stat">
-          <div class="bzp-stat-label">Total cost</div>
-          <div class="bzp-stat-value" x-text="'$' + tenants.reduce((s,t)=> s+(t.total_cost_usd||0), 0).toFixed(4)"></div>
+        <div class='bzp-stat'>
+          <div class='bzp-stat-label'>Total cost</div>
+          <div class='bzp-stat-value' x-text="'\$' + tenants.reduce((s,t)=> s+(t.total_cost_usd||0), 0).toFixed(4)"></div>
         </div>
       </div>
 
       <!-- tabs -->
-      <div style="display:flex; gap:0.4rem; border-bottom:1px solid var(--bzp-border); margin-bottom:1.5rem;">
-        <template x-for="t in ['tenants', 'audit', 'cleanup']" :key="t">
-          <button @click="activeTab=t"
+      <div style='display:flex; gap:0.4rem; border-bottom:1px solid var(--bzp-border); margin-bottom:1.5rem;'>
+        <template x-for="t in ['tenants', 'system', 'resources', 'metadata', 'audit', 'cleanup']" :key='t'>
+          <button @click='activeTab=t'
                   :style="activeTab===t ? 'border-bottom:2px solid var(--bzp-accent); color:var(--bzp-accent); font-weight:500;' : 'color:var(--bzp-ink-soft);'"
-                  style="background:none; border:none; padding:0.7rem 1rem; cursor:pointer; font-size:0.95rem; text-transform:capitalize;"
-                  x-text="t"></button>
+                  style='background:none; border:none; padding:0.7rem 1rem; cursor:pointer; font-size:0.95rem; text-transform:capitalize;'
+                  x-text='t'></button>
         </template>
+      </div>
+
+      <!-- SYSTEM tab -->
+      <div x-show="activeTab === 'system'" class='bzp-card'>
+        <h3 style='margin-bottom:1rem;'>Background Services</h3>
+        <div class='bzp-grid-stats' style='grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:1rem;'>
+          <template x-for='s in systemStatus' :key='s.name'>
+            <div class='bzp-stat' style='padding:1rem;'>
+              <div style='display:flex; justify-content:space-between; align-items:center;'>
+                <div class='bzp-stat-label' style='margin:0; font-size:0.8rem;' x-text='s.name.toUpperCase()'></div>
+                <span class='bzp-pill' :class='s.healthy ? "bzp-pill-success" : "bzp-pill-danger"' x-text='s.healthy ? "OK" : "DOWN"'></span>
+              </div>
+              <div style='margin-top:0.5rem; font-size:0.85rem; color:var(--bzp-ink-soft);' x-text='s.details || "..."'></div>
+            </div>
+          </template>
+        </div>
+        <div style='margin-top:1.5rem; font-size:0.85rem; color:var(--bzp-ink-faint); font-style:italic;'>
+          * Status updated every 30 seconds. Services marked DOWN may require manual restart via CLI if GPUs are full.
+        </div>
       </div>
 
       <!-- TENANTS tab -->
-      <div x-show="activeTab === 'tenants'" class="bzp-card" style="padding:0;">
-        <template x-if="busy">
-          <div class="bzp-empty">Loading…</div>
-        </template>
-        <template x-if="!busy && tenants.length > 0">
-          <table class="bzp-table">
-            <thead><tr>
-              <th>Tenant</th>
-              <th>Slug</th>
-              <th>Created</th>
-              <th>Runs</th>
-              <th>Cost</th>
-              <th>Limit</th>
-              <th>Status</th>
-              <th></th>
-            </tr></thead>
-            <tbody>
-              <template x-for="t in tenants" :key="t.id">
-                <tr>
-                  <td>
-                    <div style="font-weight:500;" x-text="t.name"></div>
-                    <div style="display:flex; gap:0.3rem; align-items:center; margin-top:0.2rem;">
-                      <code style="font-size:0.7rem; color:var(--bzp-ink-faint); user-select:all; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" :title="t.api_key" x-text="t.api_key"></code>
-                      <button @click="copyKey(t)" class="bzp-btn bzp-btn-ghost"
-                              style="padding:0.1rem 0.4rem; font-size:0.7rem; line-height:1;"
-                              title="Copy api_key to clipboard">📋</button>
+      <div x-show="activeTab === 'tenants'" class='bzp-card' style='padding:0;'>
+        <table class='bzp-table'>
+          <thead><tr><th>Tenant</th><th>Slug</th><th>Created</th><th>Runs</th><th>Cost</th><th>Limit</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            <template x-for='t in tenants' :key='t.id'>
+              <tr>
+                <td>
+                  <div style='font-weight:500;' x-text='t.name'></div>
+                  <div style='display:flex; gap:0.3rem; align-items:center; margin-top:0.2rem;'>
+                    <code style='font-size:0.7rem; color:var(--bzp-ink-faint); user-select:all;' x-text='t.api_key.slice(0,16)+"..."'></code>
+                    <button @click='copyKey(t)' class='bzp-btn bzp-btn-ghost' style='padding:0.1rem 0.4rem; font-size:0.7rem;'>📋</button>
+                  </div>
+                </td>
+                <td x-text='t.slug' style='font-family:monospace;'></td>
+                <td x-text='fmtDate(t.created_at)'></td>
+                <td x-text='t.runs_today + " / " + t.runs_total'></td>
+                <td x-text="'\$' + (t.total_cost_usd || 0).toFixed(4)"></td>
+                <td><input type='number' :value='t.daily_limit_override ?? ""' :placeholder="'(' + t.effective_daily_limit + ')'" @change='patchLimit(t, $event.target.value)' class='bzp-input' style='width:70px;'></td>
+                <td><span class='bzp-pill' :class='t.suspended ? "bzp-pill-danger" : "bzp-pill-success"' x-text='t.suspended ? "suspended" : "active"'></span></td>
+                <td style='text-align:right;'>
+                  <button @click='toggleSuspend(t)' class='bzp-btn bzp-btn-ghost'>Suspend</button>
+                  <button @click='impersonate(t)' class='bzp-btn bzp-btn-primary'>Sign in</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- RESOURCES tab -->
+      <div x-show="activeTab === 'resources'">
+        <div class='bzp-card'>
+          <h3>Server Disk Usage</h3>
+          <div class='bzp-grid-stats' style='margin-top:1rem;'>
+            <template x-for='d in diskUsage' :key='d.mount'>
+              <div class='bzp-stat'>
+                <div class='bzp-stat-label' x-text='d.mount'></div>
+                <div style='display:flex; align-items:baseline; gap:0.5rem;'>
+                  <div class='bzp-stat-value' x-text='d.percent + "%"'></div>
+                  <div style='font-size:0.85rem; color:var(--bzp-ink-faint);' x-text='d.used + " / " + d.total'></div>
+                </div>
+                <div style='height:4px; background:var(--bzp-border-faint); border-radius:2px; margin-top:0.5rem; overflow:hidden;'>
+                  <div :style="`width: ${d.percent}%; background: ${d.percent > 90 ? "var(--bzp-danger)" : "var(--bzp-accent)"}; height:100%;`"></div >
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div class='bzp-card' style='margin-top:1.5rem;'>
+          <h3 style='color:var(--bzp-danger);'>GPU Status (Engine Bottleneck)</h3>
+          <p style='font-size:0.95rem; color:var(--bzp-ink-soft); margin-top:0.5rem;'>
+            Background engines (VLLM, TEI) are <strong>OFFLINE</strong> because the server's GPUs are currently occupied by other processes.
+          </p>
+          <div class='bzp-grid-stats' style='margin-top:1rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));'>
+            <template x-for='g in gpuUsage' :key='g.index'>
+              <div class='bzp-stat' style='padding:0.8rem; display:block; min-height:auto;'>
+                <div style='display:flex; justify-content:space-between; align-items:baseline;'>
+                  <div class='bzp-stat-label' style='font-size:0.75rem;' x-text="'GPU ' + g.index + ': ' + g.name"></div>
+                  <div class='bzp-stat-value' style='font-size:1.1rem;' x-text='g.util + "%"'></div>
+                </div>
+                <div style='font-size:0.7rem; color:var(--bzp-ink-faint); margin-bottom:0.4rem;' x-text='g.used + " / " + g.total'></div>
+                <div style='height:3px; background:var(--bzp-border-faint); margin-bottom:0.8rem;'>
+                  <div :style="`width: ${g.util}%; background: ${g.util > 80 ? "var(--bzp-danger)" : "var(--bzp-success)"}; height:100%;`"></div >
+                </div>
+                
+                <div x-show='g.processes?.length'>
+                  <div style='font-size:0.65rem; font-weight:600; text-transform:uppercase; color:var(--bzp-ink-faint); border-bottom:1px solid var(--bzp-border-faint); padding-bottom:0.2rem; margin-bottom:0.3rem;'>Active Processes</div>
+                  <template x-for='p in g.processes' :key='p.pid'>
+                    <div style='display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; font-family:var(--bzp-font-mono); margin-bottom:0.2rem;'>
+                      <div style='display:flex; align-items:center; gap:0.4rem;'>
+                        <button @click='terminateProcess(p.pid)' class='bzp-btn bzp-btn-ghost' style='padding:0 0.2rem; height:18px; line-height:1; font-size:0.7rem; color:var(--bzp-danger); min-width:auto;' title='Terminate Process'>✕</button>
+                        <span style='color:var(--bzp-ink-soft);' x-text='p.user + " (" + p.pid + ")"'></span>
+                      </div>
+                      <span x-text='p.mem'></span>
                     </div>
-                  </td>
-                  <td style="font-family:monospace; font-size:0.85rem;" x-text="t.slug"></td>
-                  <td style="color:var(--bzp-ink-soft); font-size:0.85rem;" x-text="fmtDate(t.created_at)"></td>
-                  <td>
-                    <span x-text="t.runs_today"></span>
-                    <span style="color:var(--bzp-ink-faint);"> / </span>
-                    <span x-text="t.runs_total" style="color:var(--bzp-ink-faint); font-size:0.85rem;"></span>
-                  </td>
-                  <td style="font-family:monospace; font-size:0.82rem;" x-text="'$' + (t.total_cost_usd || 0).toFixed(4)"></td>
-                  <td>
-                    <input type="number" min="0" max="1000"
-                           :value="t.daily_limit_override ?? ''"
-                           :placeholder="`(${t.effective_daily_limit})`"
-                           @change="patchLimit(t, $event.target.value)"
-                           class="bzp-input"
-                           style="width:90px; padding:0.3rem 0.5rem; font-size:0.85rem;">
-                  </td>
-                  <td>
-                    <template x-if="t.suspended"><span class="bzp-pill bzp-pill-danger">suspended</span></template>
-                    <template x-if="!t.suspended"><span class="bzp-pill bzp-pill-success">active</span></template>
-                  </td>
-                  <td style="text-align:right; white-space:nowrap;">
-                    <button @click="toggleSuspend(t)" class="bzp-btn bzp-btn-ghost" style="padding:0.3rem 0.6rem; font-size:0.78rem;">
-                      <span x-show="!t.suspended">Suspend</span>
-                      <span x-show="t.suspended">Activate</span>
-                    </button>
-                    <button @click="deleteOne(t)" class="bzp-btn bzp-btn-ghost" style="padding:0.3rem 0.6rem; font-size:0.78rem; color:var(--bzp-danger); border-color:var(--bzp-danger-soft);">
-                      Delete
-                    </button>
-                    <button @click="impersonate(t)" class="bzp-btn bzp-btn-primary" style="padding:0.3rem 0.7rem; font-size:0.78rem;">
-                      Sign in as →
-                    </button>
-                  </td>
+                  </template>
+                </div>
+                <div x-show='!g.processes?.length' style='font-size:0.75rem; color:var(--bzp-ink-faint); font-style:italic;'>No active compute apps</div>
+              </div>
+            </template>
+          </div>
+          <div style='margin-top:1rem; padding:0.8rem; background:var(--bzp-cream); border-radius:4px; border:1px solid var(--bzp-border); font-size:0.85rem; color:var(--bzp-ink-soft);'>
+            <strong>Operator Action Required:</strong> To start engines, find a GPU with &lt;10% utilization and &gt;20GB free memory, then run <code>CUDA_VISIBLE_DEVICES=N bash scripts/run_vllm.sh</code> in the tmux session.
+          </div>
+        </div>
+
+        <div class='bzp-card' style='margin-top:1.5rem;'>
+          <h3>Top GPU Consumers (Aggregated)</h3>
+          <p style='font-size:0.9rem; color:var(--bzp-ink-soft); margin-bottom:1rem;'>Total GPU memory used by each operator across all cards.</p>
+          <table class='bzp-table'>
+            <thead><tr><th>Operator</th><th>Total GPU Memory</th></tr></thead>
+            <tbody>
+              <template x-for='u in topGpuUsers' :key='u.user'>
+                <tr>
+                  <td><strong x-text='u.user'></strong></td>
+                  <td x-text='u.mem'></td>
                 </tr>
               </template>
             </tbody>
           </table>
-        </template>
+          <div x-show='!topGpuUsers.length' style='padding:1rem; text-align:center; color:var(--bzp-ink-faint); font-style:italic;'>No active GPU processes detected.</div>
+        </div>
+
+        <div class='bzp-card' style='margin-top:1.5rem;'>
+          <h3>Maintenance Guide</h3>
+          <div style='line-height:1.6; color:var(--bzp-ink-soft); font-size:0.95rem;'>
+            <p>If the <strong>/raid</strong> partition is above 90%, AI analysis may fail. Follow these steps via SSH to reclaim space:</p>
+            
+            <h4 style='margin:1.5rem 0 0.5rem; color:var(--bzp-ink);'>1. Clear System Logs</h4>
+            <code class='bzp-code' style='display:block; padding:0.8rem;'>rm logs/*.log</code>
+            <p style='font-size:0.85rem; margin-top:0.4rem;'>Safely deletes API, Qdrant, and Engine logs. These grow over time.</p>
+
+            <h4 style='margin:1.5rem 0 0.5rem; color:var(--bzp-ink);'>2. Prune HuggingFace Cache</h4>
+            <code class='bzp-code' style='display:block; padding:0.8rem;'>rm -rf .cache/huggingface/*</code>
+            <p style='font-size:0.85rem; margin-top:0.4rem;'>Deletes downloaded AI models. They will be re-downloaded automatically when needed.</p>
+
+            <h4 style='margin:1.5rem 0 0.5rem; color:var(--bzp-ink);'>3. Clean Temporary Files</h4>
+            <code class='bzp-code' style='display:block; padding:0.8rem;'>rm -rf /tmp/bizpulse-*</code>
+            <p style='font-size:0.85rem; margin-top:0.4rem;'>Clears transient data from previous analysis runs.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- METADATA tab -->
+      <div x-show="activeTab === 'metadata'">
+         <div class='bzp-card'>
+            <h3>Industries</h3>
+            <button @click='addIndustry()' class='bzp-btn bzp-btn-primary' style='margin-bottom:1rem;'>Add Industry +</button>
+            <table class='bzp-table'>
+              <thead><tr><th>Slug</th><th>Name</th><th></th></tr></thead>
+              <tbody>
+                <template x-for='p in industries' :key='p.slug'>
+                  <tr>
+                    <td x-text='p.slug' style='font-family:monospace;'></td>
+                    <td x-text='p.name'></td>
+                    <td style='text-align:right;'><button @click='deleteIndustry(p)' class='bzp-btn bzp-btn-ghost' style='color:var(--bzp-danger);'>Delete</button></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+         </div>
+         <div class='bzp-card' style='margin-top:1.5rem;'>
+            <h3>Locations</h3>
+            <div style='display:flex; gap:1rem; margin-bottom:1rem;'>
+              <button @click='addCountry()' class='bzp-btn bzp-btn-primary'>Add Country +</button>
+              <button @click='addState()' class='bzp-btn bzp-btn-primary'>Add State +</button>
+            </div>
+            <h4>Countries</h4>
+            <div style='display:flex; flex-wrap:wrap; gap:0.5rem;'>
+              <template x-for='c in locations.countries' :key='c.code'>
+                <span class='bzp-pill bzp-pill-neutral' x-text='c.code + ": " + c.name'></span>
+              </template>
+            </div>
+            <h4 style='margin-top:1.5rem;'>States</h4>
+            <template x-for='(states, country) in locations.states' :key='country'>
+               <div style='margin-bottom:0.5rem;'>
+                 <strong x-text='country'></strong>: 
+                 <template x-for='s in states' :key='s.code'>
+                   <span class='bzp-pill bzp-pill-accent' style='margin-right:0.3rem;' x-text='s.name'></span>
+                 </template>
+               </div>
+            </template>
+         </div>
       </div>
 
       <!-- AUDIT tab -->
-      <div x-show="activeTab === 'audit'" class="bzp-card" style="padding:0;">
-        <template x-if="!auditLoaded">
-          <div class="bzp-empty">
-            <button @click="loadAudit()" class="bzp-btn bzp-btn-primary">Load audit log</button>
-          </div>
-        </template>
-        <template x-if="auditLoaded && audit.length === 0">
-          <div class="bzp-empty">No audit entries yet.</div>
-        </template>
-        <template x-if="auditLoaded && audit.length > 0">
-          <table class="bzp-table">
-            <thead><tr>
-              <th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>IP</th>
-            </tr></thead>
-            <tbody>
-              <template x-for="e in audit" :key="e.id">
-                <tr>
-                  <td style="color:var(--bzp-ink-soft); font-size:0.85rem; white-space:nowrap;" x-text="fmtTime(e.occurred_at)"></td>
-                  <td style="font-family:monospace; font-size:0.82rem;" x-text="e.actor"></td>
-                  <td>
-                    <span class="bzp-pill bzp-pill-accent" x-text="e.action"></span>
-                  </td>
-                  <td style="font-family:monospace; font-size:0.78rem; color:var(--bzp-ink-soft);">
-                    <span x-show="e.target_kind" x-text="e.target_kind + ': '"></span>
-                    <span x-text="e.target_id ? (e.target_id.length > 36 ? e.target_id.slice(0,36)+'…' : e.target_id) : '—'"></span>
-                  </td>
-                  <td style="font-family:monospace; font-size:0.78rem; color:var(--bzp-ink-soft); max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" x-text="JSON.stringify(e.details)" :title="JSON.stringify(e.details, null, 2)"></td>
-                  <td style="font-family:monospace; font-size:0.78rem; color:var(--bzp-ink-faint);" x-text="e.request_ip || '—'"></td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
-        </template>
+      <div x-show="activeTab === 'audit'" class='bzp-card'>
+        <button @click='loadAudit()' class='bzp-btn bzp-btn-primary'>Load audit log</button>
+        <table class='bzp-table' style='margin-top:1rem;'>
+          <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th></tr></thead>
+          <tbody>
+            <template x-for='e in audit' :key='e.id'>
+              <tr><td x-text='fmtTime(e.occurred_at)'></td><td x-text='e.actor'></td><td x-text='e.action'></td><td x-text='e.target_kind + ": " + e.target_id'></td></tr>
+            </template>
+          </tbody>
+        </table>
       </div>
 
       <!-- CLEANUP tab -->
-      <div x-show="activeTab === 'cleanup'" class="bzp-card">
-        <h2 style="margin-top:0;">Bulk delete tenants</h2>
-        <div style="color:var(--bzp-ink-soft); font-size:0.9rem; margin-bottom:1rem;">
-          POSIX regex matched against <code>tenants.name</code>. Examples:
-          <code>^(pytest|A|B|gated test)</code>,
-          <code>^(run \d|server-side|Live Tunnel|Tunnel Demo)</code>.
-          Deletes cascade to businesses + runs.
-        </div>
-        <label class="bzp-label" for="cleanupPattern">Pattern</label>
-        <input id="cleanupPattern" x-model="cleanupPattern" type="text" class="bzp-input"
-               placeholder="^(pytest|A|B|run |server-side |Live |Tunnel )">
-        <div style="margin-top:1rem; display:flex; gap:0.6rem; align-items:center;">
-          <button @click="dryRunCleanup()" :disabled="cleanupBusy || !cleanupPattern" class="bzp-btn bzp-btn-ghost">
-            🔍 Preview matches (dry run)
-          </button>
-          <button @click="confirmAndCleanup()" :disabled="cleanupBusy || !cleanupPattern || cleanupPreview.length === 0"
-                  class="bzp-btn bzp-btn-primary" style="background:var(--bzp-danger);">
-            🗑 Delete <span x-text="cleanupPreview.length || 0"></span> tenant(s)
-          </button>
-          <span x-show="cleanupBusy" style="color:var(--bzp-ink-faint);">working…</span>
-        </div>
-        <template x-if="cleanupPreview.length > 0">
-          <div style="margin-top:1.2rem; max-height:340px; overflow-y:auto; border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:0.6rem;">
-            <div style="font-size:0.85rem; color:var(--bzp-ink-soft); margin-bottom:0.4rem;">
-              <strong x-text="cleanupPreview.length"></strong> matches:
-            </div>
-            <template x-for="m in cleanupPreview.slice(0,200)" :key="m.id">
-              <div style="font-family:monospace; font-size:0.78rem; color:var(--bzp-ink-soft); padding:0.2rem 0; border-bottom:1px solid var(--bzp-border-soft);">
-                <span x-text="m.name"></span> · <span style="color:var(--bzp-ink-faint);" x-text="m.slug"></span>
-              </div>
-            </template>
-            <div x-show="cleanupPreview.length > 200" style="font-size:0.78rem; color:var(--bzp-ink-faint); margin-top:0.5rem;">
-              … and <span x-text="cleanupPreview.length - 200"></span> more
-            </div>
-          </div>
-        </template>
+      <div x-show="activeTab === 'cleanup'" class='bzp-card'>
+        <input x-model='cleanupPattern' class='bzp-input' placeholder='Regex pattern...'>
+        <button @click='dryRunCleanup()' class='bzp-btn bzp-btn-ghost'>Preview</button>
+        <button @click='confirmAndCleanup()' class='bzp-btn bzp-btn-primary'>Delete</button>
       </div>
 
-      <div style="text-align:right; margin-top:1rem;">
-        <button @click="load()" class="bzp-btn bzp-btn-ghost" style="font-size:0.85rem;">↻ Refresh</button>
+      <div style='text-align:right; margin-top:1rem;'>
+        <button @click='load()' class='bzp-btn bzp-btn-ghost'>↻ Refresh</button>
       </div>
-
     </div>
   </template>
-
 </div>
-
 </body>
 </html>

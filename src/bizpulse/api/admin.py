@@ -5,11 +5,6 @@ is also set, requests must additionally pass a valid 6-digit TOTP code
 in the X-Admin-TOTP header (Google Authenticator / 1Password / Authy
 compatible). When TOTP is enabled, the key alone is insufficient.
 
-Why a separate key (not an "admin tenant"): operators aren't tenants, and
-we don't want admin-level powers tied to a tenant row that an attacker
-who breached that tenant's api_key could exploit. The admin key is held
-only by the platform operator.
-
 Endpoints are namespaced under /v1/admin/ and gated by `require_admin`.
 """
 
@@ -18,15 +13,19 @@ from __future__ import annotations
 import hmac
 import os
 from datetime import timedelta
+from pathlib import Path
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+import httpx
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
 from bizpulse.api.dependencies import get_store
 from bizpulse.api.usage import daily_limit
 from bizpulse.models import Tenant
 from bizpulse.models.common import utcnow
+from bizpulse.models.industry import IndustryPack
 from bizpulse.storage import Store
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
@@ -43,9 +42,6 @@ def _totp_secret() -> str | None:
 
 
 def _verify_totp(code: str | None) -> bool:
-    """Verify a TOTP code against the configured secret. Returns False on
-    bad code, missing pyotp, or absent secret. The caller decides what to
-    do with the result."""
     if not code:
         return False
     secret = _totp_secret()
@@ -58,7 +54,7 @@ def _verify_totp(code: str | None) -> bool:
     try:
         totp = pyotp.TOTP(secret)
         return bool(totp.verify(code, valid_window=1))
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
 
 
@@ -66,13 +62,6 @@ def require_admin(
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
     x_admin_totp: str | None = Header(default=None, alias="X-Admin-TOTP"),
 ) -> None:
-    """Block requests that don't carry the operator's admin key.
-
-    If BIZPULSE_ADMIN_KEY isn't set, all admin endpoints return 503 with a
-    clear message — we don't want to silently expose them when misconfigured.
-
-    If BIZPULSE_ADMIN_TOTP_SECRET is set, X-Admin-TOTP must also pass.
-    """
     expected = _admin_key()
     if expected is None:
         raise HTTPException(
@@ -95,9 +84,8 @@ def require_admin(
 
 # --- response shapes -------------------------------------------------------
 
-class TenantWithUsage(BaseModel):
-    """Admin's view of a tenant — includes usage and the suspended flag."""
 
+class TenantWithUsage(BaseModel):
     id: str
     name: str
     slug: str
@@ -115,10 +103,7 @@ class TenantWithUsage(BaseModel):
 class UpdateTenantRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     daily_limit_override: int | None = Field(default=None, ge=0, le=10_000)
-    clear_daily_limit_override: bool = Field(
-        default=False,
-        description="Pass true to explicitly clear the override (revert to global default).",
-    )
+    clear_daily_limit_override: bool = Field(default=False)
     suspended: bool | None = None
     notes: str | None = Field(default=None, max_length=2000)
 
@@ -132,27 +117,13 @@ class ImpersonateResponse(BaseModel):
 
 class AdminStatusResponse(BaseModel):
     enabled: bool
-    """Whether BIZPULSE_ADMIN_KEY is configured. Public — does not reveal the key."""
-
     requires_totp: bool = False
-    """Whether BIZPULSE_ADMIN_TOTP_SECRET is set; the GUI uses this to show
-    the TOTP field."""
-
-
-class TenantUsageDetail(BaseModel):
-    total_cost_usd: float
-    total_input_tokens: int
-    total_output_tokens: int
-    llm_call_count: int
-    runs_total: int
 
 
 class CleanupRequest(BaseModel):
-    """Bulk-delete tenants whose name matches a POSIX regex."""
-
-    pattern: str = Field(min_length=1, max_length=200, description="POSIX regex; matched against tenants.name (case-sensitive).")
-    dry_run: bool = Field(default=True, description="If true, return matches without deleting.")
-    confirm_token: str | None = Field(default=None, description="Required (must equal 'DELETE') when dry_run=false.")
+    pattern: str = Field(min_length=1, max_length=200)
+    dry_run: bool = Field(default=True)
+    confirm_token: str | None = Field(default=None)
 
 
 class CleanupResponse(BaseModel):
@@ -162,14 +133,193 @@ class CleanupResponse(BaseModel):
     deleted_count: int
 
 
+# ... existing code ...
+
+
+@router.get("/proxy/{service}/{path:path}")
+async def admin_proxy(
+    service: str,
+    path: str,
+    _: None = Depends(require_admin),
+) -> Response:
+    """Proxy health checks to internal services."""
+    urls = {
+        "qdrant": os.environ.get("QDRANT_URL", "http://127.0.0.1:6333").rstrip("/"),
+        "vllm": os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8800/v1").replace("/v1", ""),
+        "tei-embed": os.environ.get("EMBED_BASE_URL", "http://127.0.0.1:8081"),
+        "tei-rerank": os.environ.get("RERANK_BASE_URL", "http://127.0.0.1:8082"),
+    }
+    if service not in urls:
+        raise HTTPException(status_code=404, detail=f"Unknown service: {service}")
+
+    service_base = urls[service].rstrip("/")
+    target_path = path
+    if path == "health" and ("11434" in service_base or "ollama" in service_base.lower()):
+        target_path = ""
+
+    target_url = f"{service_base}/{target_path}".rstrip("/")
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.get(target_url, timeout=2.0)
+            return Response(
+                content=r.content,
+                status_code=r.status_code,
+                media_type=r.headers.get("content-type"),
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=502, detail=f"Service {service} unreachable: {e!s}"
+            ) from e
+
+
+@router.post("/processes/{pid}/terminate")
+def terminate_process(pid: int, _: None = Depends(require_admin)) -> dict:
+    """Attempt to terminate a process by PID."""
+    import os
+    import signal
+
+    try:
+        os.kill(pid, signal.SIGTERM)
+        return {"status": "success", "detail": f"Signal sent to process {pid}"}
+    except PermissionError:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Permission denied: You cannot kill process {pid} as it belongs to another user.",
+        ) from None
+    except ProcessLookupError:
+        raise HTTPException(status_code=404, detail=f"Process {pid} not found.") from None
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/gpu")
+def get_gpu_stats(_: None = Depends(require_admin)) -> dict:
+    """Get live GPU utilization and memory stats, including processes and top users."""
+    import subprocess
+
+    stats = []
+    user_mem: dict[str, int] = {}
+    try:
+        # 1. Map UUID to Index
+        id_map = {}
+        res_ids = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=index,uuid", "--format=csv,noheader"], text=True
+        )
+        for line in res_ids.strip().split("\n"):
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) == 2:
+                id_map[parts[1]] = parts[0]
+
+        # 2. Get User/Process info from system
+        proc_owners = {}
+        try:
+            res_ps = subprocess.check_output(
+                ["ps", "-e", "-o", "pid,user,comm", "--no-headers"], text=True
+            )
+            for line in res_ps.strip().split("\n"):
+                parts = line.split(None, 2)
+                if len(parts) >= 3:
+                    proc_owners[parts[0]] = {"user": parts[1], "comm": parts[2]}
+        except Exception:
+            pass
+
+        # 3. Get Compute Apps
+        gpu_procs: dict[str, list[dict[str, Any]]] = {}
+        try:
+            res_apps = subprocess.check_output(
+                [
+                    "nvidia-smi",
+                    "--query-compute-apps=gpu_uuid,pid,used_gpu_memory",
+                    "--format=csv,noheader,nounits",
+                ],
+                text=True,
+            )
+            for line in res_apps.strip().split("\n"):
+                parts = [p.strip() for p in line.split(",")]
+                if len(parts) == 3:
+                    uuid, pid, mem = parts
+                    idx = id_map.get(uuid)
+                    if idx:
+                        if idx not in gpu_procs:
+                            gpu_procs[idx] = []
+                        owner = proc_owners.get(pid, {"user": "unknown", "comm": "unknown"})
+                        gpu_procs[idx].append(
+                            {
+                                "pid": pid,
+                                "user": owner["user"],
+                                "comm": owner["comm"],
+                                "mem": f"{mem} MiB",
+                            }
+                        )
+                        # Aggregate by user
+                        user = owner["user"]
+                        user_mem[user] = user_mem.get(user, 0) + int(mem)
+        except Exception:
+            pass
+
+        # 4. Get GPU main stats
+        res = subprocess.check_output(
+            [
+                "nvidia-smi",
+                "--query-gpu=index,name,memory.total,memory.used,utilization.gpu",
+                "--format=csv,noheader,nounits",
+            ],
+            text=True,
+        )
+        for line in res.strip().split("\n"):
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) >= 5:
+                stats.append(
+                    {
+                        "index": parts[0],
+                        "name": parts[1],
+                        "total": f"{parts[2]} MiB",
+                        "used": f"{parts[3]} MiB",
+                        "util": int(parts[4]),
+                        "processes": gpu_procs.get(parts[0], []),
+                    }
+                )
+    except Exception:
+        pass
+
+    # Sort top users
+    top_users: list[dict[str, Any]] = [{"user": u, "mem": f"{m} MiB", "raw_mem": m} for u, m in user_mem.items()]
+    top_users.sort(key=lambda x: int(x["raw_mem"]), reverse=True)
+
+    return {"gpus": stats, "top_users": top_users[:10]}
+
+
+@router.get("/storage")
+def get_storage_stats(_: None = Depends(require_admin)) -> list[dict]:
+    """Get disk usage for key partitions."""
+    import subprocess
+
+    stats = []
+    try:
+        # Run df for /raid and / (root)
+        res = subprocess.check_output(["df", "-h", "/raid", "/"], text=True)
+        lines = res.strip().split("\n")[1:]  # skip header
+        for line in lines:
+            parts = line.split()
+            if len(parts) >= 6:
+                stats.append(
+                    {
+                        "mount": parts[5],
+                        "total": parts[1],
+                        "used": parts[2],
+                        "free": parts[3],
+                        "percent": int(parts[4].replace("%", "")),
+                    }
+                )
+    except Exception:
+        pass
+    return stats
+
+
 # --- routes ----------------------------------------------------------------
 
-@router.get(
-    "/status",
-    response_model=AdminStatusResponse,
-    summary="Whether admin endpoints are enabled",
-    description="Public health-check the GUI uses to decide whether to surface the Admin tab on the login page.",
-)
+
+@router.get("/status", response_model=AdminStatusResponse)
 def admin_status() -> AdminStatusResponse:
     return AdminStatusResponse(
         enabled=_admin_key() is not None,
@@ -188,7 +338,7 @@ def _to_tenant_with_usage(t: Tenant, store: Store) -> TenantWithUsage:
     try:
         usage = store.usage_for_tenant(t.id)
         cost_total = float(usage.get("total_cost_usd", 0.0) or 0.0)
-    except Exception:  # noqa: BLE001 — pre-migration storage may not have it
+    except Exception:
         pass
     return TenantWithUsage(
         id=str(t.id),
@@ -206,11 +356,7 @@ def _to_tenant_with_usage(t: Tenant, store: Store) -> TenantWithUsage:
     )
 
 
-@router.get(
-    "/tenants",
-    response_model=list[TenantWithUsage],
-    summary="List every tenant with current usage",
-)
+@router.get("/tenants", response_model=list[TenantWithUsage])
 def list_tenants(
     _: None = Depends(require_admin),
     store: Store = Depends(get_store),
@@ -218,27 +364,7 @@ def list_tenants(
     return [_to_tenant_with_usage(t, store) for t in store.list_tenants()]
 
 
-@router.get(
-    "/tenants/{tenant_id}",
-    response_model=TenantWithUsage,
-    summary="Single tenant detail (admin view)",
-)
-def get_tenant(
-    tenant_id: UUID,
-    _: None = Depends(require_admin),
-    store: Store = Depends(get_store),
-) -> TenantWithUsage:
-    t = store.get_tenant(tenant_id)
-    if t is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
-    return _to_tenant_with_usage(t, store)
-
-
-@router.patch(
-    "/tenants/{tenant_id}",
-    response_model=TenantWithUsage,
-    summary="Update tenant: name / daily_limit_override / suspended / notes",
-)
+@router.patch("/tenants/{tenant_id}", response_model=TenantWithUsage)
 def update_tenant(
     tenant_id: UUID,
     body: UpdateTenantRequest,
@@ -247,6 +373,7 @@ def update_tenant(
     store: Store = Depends(get_store),
 ) -> TenantWithUsage:
     from bizpulse.api.audit import record_audit
+
     before = store.get_tenant(tenant_id)
     updated = store.update_tenant(
         tenant_id,
@@ -257,7 +384,7 @@ def update_tenant(
         notes=body.notes,
     )
     if updated is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
+        raise HTTPException(status_code=404, detail="not found")
     if before is not None:
         diff: dict[str, object] = {}
         for field in ("name", "daily_limit_override", "suspended", "notes"):
@@ -278,46 +405,7 @@ def update_tenant(
     return _to_tenant_with_usage(updated, store)
 
 
-@router.delete(
-    "/tenants/{tenant_id}",
-    summary="Delete a single tenant (cascades to businesses + runs)",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-def delete_tenant(
-    tenant_id: UUID,
-    request: Request,
-    _: None = Depends(require_admin),
-    store: Store = Depends(get_store),
-) -> None:
-    from bizpulse.api.audit import record_audit
-    t = store.get_tenant(tenant_id)
-    if t is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
-    ok = store.delete_tenant(tenant_id)
-    if not ok:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
-    record_audit(
-        store=store,
-        actor="admin",
-        action="tenant.delete",
-        target_kind="tenant",
-        target_id=str(tenant_id),
-        details={"name": t.name, "slug": t.slug},
-        request_ip=request.client.host if request.client else None,
-    )
-
-
-@router.post(
-    "/tenants/cleanup",
-    response_model=CleanupResponse,
-    summary="Bulk-delete tenants by name regex (dry_run by default)",
-    description=(
-        "POSIX regex matched against `tenants.name`. dry_run=true (default) "
-        "returns matches without deleting. Set dry_run=false AND "
-        "confirm_token='DELETE' to actually remove them. Cascades to all "
-        "businesses + runs + run_steps via FK ON DELETE CASCADE."
-    ),
-)
+@router.post("/tenants/cleanup", response_model=CleanupResponse)
 def cleanup_tenants(
     body: CleanupRequest,
     request: Request,
@@ -328,10 +416,8 @@ def cleanup_tenants(
 
     if not body.dry_run and body.confirm_token != "DELETE":
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="confirm_token must equal 'DELETE' when dry_run=false.",
+            status_code=400, detail="confirm_token must equal 'DELETE' when dry_run=false."
         )
-
     try:
         if body.dry_run:
             matched = store.find_tenants_by_name_regex(body.pattern)
@@ -339,12 +425,8 @@ def cleanup_tenants(
         else:
             matched = store.delete_tenants_by_name_regex(body.pattern)
             deleted = len(matched)
-    except Exception as exc:  # noqa: BLE001 — bad regex / SQL error
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"cleanup failed: {exc!s}",
-        )
-
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"cleanup failed: {exc!s}") from exc
     if not body.dry_run:
         record_audit(
             store=store,
@@ -355,26 +437,12 @@ def cleanup_tenants(
             details={"deleted_count": deleted, "matched_names": [m["name"] for m in matched[:50]]},
             request_ip=request.client.host if request.client else None,
         )
-
     return CleanupResponse(
-        pattern=body.pattern,
-        dry_run=body.dry_run,
-        matched=matched,
-        deleted_count=deleted,
+        pattern=body.pattern, dry_run=body.dry_run, matched=matched, deleted_count=deleted
     )
 
 
-@router.post(
-    "/tenants/{tenant_id}/impersonate",
-    response_model=ImpersonateResponse,
-    summary="Return a tenant's api_key so the operator can sign in as them",
-    description=(
-        "Operator UX: lets you debug a user's report or kick off an analysis "
-        "on their behalf. The returned api_key is what the GUI swaps into "
-        "localStorage so the dashboard renders that tenant's view. The GUI "
-        "shows a yellow 'Impersonating X' banner during the session."
-    ),
-)
+@router.post("/tenants/{tenant_id}/impersonate", response_model=ImpersonateResponse)
 def impersonate(
     tenant_id: UUID,
     request: Request,
@@ -382,9 +450,10 @@ def impersonate(
     store: Store = Depends(get_store),
 ) -> ImpersonateResponse:
     from bizpulse.api.audit import record_audit
+
     t = store.get_tenant(tenant_id)
     if t is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
+        raise HTTPException(status_code=404, detail="not found")
     record_audit(
         store=store,
         actor="admin",
@@ -394,9 +463,59 @@ def impersonate(
         details={"name": t.name, "slug": t.slug},
         request_ip=request.client.host if request.client else None,
     )
-    return ImpersonateResponse(
-        tenant_id=str(t.id),
-        name=t.name,
-        slug=t.slug,
-        api_key=t.api_key,
-    )
+    return ImpersonateResponse(tenant_id=str(t.id), name=t.name, slug=t.slug, api_key=t.api_key)
+
+
+# --- metadata management --------------------------------------------------
+
+
+@router.get("/metadata/locations", summary="Get locations metadata")
+def get_admin_locations(_: None = Depends(require_admin)) -> dict:
+    from bizpulse.api.industries import _load_locations
+
+    return _load_locations()
+
+
+@router.post("/metadata/locations", summary="Save locations metadata")
+def save_admin_locations(body: dict, _: None = Depends(require_admin)) -> dict:
+    import json
+    from pathlib import Path
+
+    data_dir = Path(__file__).resolve().parents[3] / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    with (data_dir / "locations.json").open("w", encoding="utf-8") as f:
+        json.dump(body, f, indent=2)
+    return body
+
+
+# --- industry management --------------------------------------------------
+
+
+@router.get("/industries", summary="List industry packs")
+def list_industries(_: None = Depends(require_admin)) -> list[dict]:
+    from bizpulse.models.industry import load_all_industries
+
+    all_packs = load_all_industries()
+    return [p.model_dump() for p in all_packs.values()]
+
+
+@router.post("/industries", summary="Create/Update an industry pack")
+def save_industry(pack: IndustryPack, _: None = Depends(require_admin)) -> IndustryPack:
+    import yaml
+
+    base = Path(__file__).resolve().parents[3] / "industries"
+    base.mkdir(parents=True, exist_ok=True)
+    path = base / f"{pack.slug}.yaml"
+    with path.open("w", encoding="utf-8") as fh:
+        yaml.safe_dump(pack.model_dump(), fh)
+    return pack
+
+
+@router.delete("/industries/{slug}", summary="Delete an industry pack")
+def delete_industry(slug: str, _: None = Depends(require_admin)) -> dict:
+    base = Path(__file__).resolve().parents[3] / "industries"
+    path = base / f"{slug}.yaml"
+    if path.is_file():
+        path.unlink()
+        return {"status": "deleted"}
+    raise HTTPException(status_code=404, detail="not found")
