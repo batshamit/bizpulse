@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang='en'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>BizPulse — About</title>
+  <link rel='preconnect' href='https://fonts.googleapis.com'>
+  <link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>
+  <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap' rel='stylesheet'>
+  <link rel='stylesheet' href='/ui/css/app.css'>
+  <script defer src='https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js'></script>
+  <script src='/ui/js/app.js'></script>
+</head>
+<body>
+
+<nav class='bzp-nav' x-data='topNav()'>
+  <div class='bzp-nav-inner'>
+    <a href='/ui/' class='bzp-brand'>BizPulse<span class='dot'>.</span></a>
+    <div class='bzp-nav-links'>
+      <a href='/ui/dashboard.html' x-show='tenant'>Dashboard</a>
+      <a href='/ui/history.html' x-show='tenant'>History</a>
+      <a href='/ui/about.html' class='active'>About</a>
+      <a href='#' @click.prevent='logout()' x-show='tenant' style='color:var(--bzp-ink-soft);'>Sign out</a>
+      <a href='/ui/admin.html' x-show='!tenant' style='color:var(--bzp-ink-soft);'>Operator</a>
+    </div>
+  </div>
+</nav>
+
+<div class='bzp-container' style='max-width: 800px; margin-top: 4rem; margin-bottom: 6rem;'>
+  <header style='text-align: center; margin-bottom: 4rem;'>
+    <h1 class='bzp-page-title' style='font-size: 3rem;'>Intelligence for the Modern Enterprise</h1>
+    <p class='bzp-page-subtitle' style='font-size: 1.25rem;'>BizPulse is a multi-agent AI platform designed to transform raw business data into actionable marketing strategies with rigorous validation and zero hallucination.</p>
+  </header>
+
+  <section class='bzp-card' style='margin-bottom: 3rem;'>
+    <h2 style='margin-top: 0;'>The Core Philosophy</h2>
+    <p>In an era where AI can often hallucinate or provide generic advice, BizPulse takes a different approach. We believe that business intelligence must be <strong>grounded in evidence</strong>, <strong>isolated for security</strong>, and <strong>vetted by a council</strong> of diverse perspectives.</p>
+  </section>
+
+  <div style='display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 4rem;'>
+    <div class='bzp-card'>
+      <h3 style='color: var(--bzp-accent);'>Council of LLMs</h3>
+      <p>Every analysis is performed by a collaborative "Council" of models from Anthropic, Google, and OpenAI. This diversity ensures that no single model's bias or failure mode dominates the output.</p>
+    </div>
+    <div class='bzp-card'>
+      <h3 style='color: var(--bzp-accent);'>Grounded Citations</h3>
+      <p>Every factual claim made in our reports includes direct citations back to the source data. If the AI can't prove it, we don't show it.</p>
+    </div>
+    <div class='bzp-card'>
+      <h3 style='color: var(--bzp-accent);'>Tenant Isolation</h3>
+      <p>Your data is yours alone. Our architecture enforces strict tenant isolation at the retrieval layer, ensuring that your business insights never leak across boundaries.</p>
+    </div>
+    <div class='bzp-card'>
+      <h3 style='color: var(--bzp-accent);'>Industry Verticalization</h3>
+      <p>Generic marketing doesn't work. We use specialized "Industry Packs" that customize the analysis pipeline for Fintech, Real Estate, Construction, and more.</p>
+    </div>
+  </div>
+
+  <section style='border-top: 1px solid var(--bzp-border); padding-top: 3rem;'>
+    <h2>How it Works</h2>
+    <ol style='line-height: 1.8; color: var(--bzp-ink-soft);'>
+      <li><strong>Ingestion:</strong> We crawl and process your business website and related public data.</li>
+      <li><strong>Retrieval:</strong> Relevant context is retrieved using high-dimensional vector search.</li>
+      <li><strong>Analysis:</strong> Multiple specialized agents (Scouts, Critics, Strategists) debate the data.</li>
+      <li><strong>Synthesis:</strong> A final Judge agent consolidates the debate into a clean, actionable marketing strategy.</li>
+    </ol>
+  </section>
+
+  <footer style='text-align: center; margin-top: 5rem; color: var(--bzp-ink-faint); font-size: 0.9rem;'>
+    <p>&copy; 2026 BizPulse AI Platform. Built for precision.</p>
+  </footer>
+</div>
+
+</body>
+</html>

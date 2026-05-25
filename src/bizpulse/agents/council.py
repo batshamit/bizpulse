@@ -101,6 +101,12 @@ class Council:
         self.members = list(members)
         self.judge = judge
         self.fallback_judge = fallback_judge
+        self.fallback_judges: list[LLMClient] = []
+        if fallback_judge is not None:
+            self.fallback_judges.append(fallback_judge)
+            for m in self.members:
+                if m.name != judge.name and m.name != fallback_judge.name:
+                    self.fallback_judges.append(m)
         self.rounds = rounds
         self.round_temperature = round_temperature
         self.synthesis_temperature = synthesis_temperature
@@ -144,20 +150,28 @@ class Council:
             judge_used = self.judge.name
         except (LLMError, Exception) as exc:
             log.warning("council.judge_failed", judge=self.judge.name, error=str(exc)[:200])
-            if self.fallback_judge is None:
+            synth = None
+            last_err = exc
+            for fb in self.fallback_judges:
+                try:
+                    synth = await fb.complete(
+                        system=self._synthesis_system(system),
+                        user=synth_user,
+                        max_tokens=self.max_tokens,
+                        temperature=self.synthesis_temperature,
+                    )
+                    judge_used = fb.name
+                    minority.append(
+                        f"judge fallback used: primary={self.judge.name} failed -> {fb.name} due to {type(exc).__name__}: {str(exc)[:150]}"
+                    )
+                    break
+                except Exception as fb_exc:
+                    log.warning("council.fallback_judge_failed", judge=fb.name, error=str(fb_exc)[:200])
+                    last_err = fb_exc
+            if synth is None:
                 raise CouncilError(
-                    f"judge {self.judge.name} failed and no fallback set: {exc}"
-                ) from exc
-            synth = await self.fallback_judge.complete(
-                system=self._synthesis_system(system),
-                user=synth_user,
-                max_tokens=self.max_tokens,
-                temperature=self.synthesis_temperature,
-            )
-            judge_used = self.fallback_judge.name
-            minority.append(
-                f"judge fallback used: primary={self.judge.name} failed -> {self.fallback_judge.name}"
-            )
+                    f"judge {self.judge.name} failed and all fallbacks failed. Last error: {last_err}"
+                ) from last_err
 
         total_cost = synth.cost_usd + sum(p.cost_usd for r in rounds for p in r)
         latency_ms = (time.perf_counter() - t0) * 1000.0

@@ -67,16 +67,16 @@ class PostgresStore:
 
     # ----- tenants -------------------------------------------------------
 
-    def create_tenant(self, name: str, slug: str | None = None) -> Tenant:
+    def create_tenant(self, name: str, slug: str | None = None, is_test: bool = False) -> Tenant:
         chosen_slug = slug or slugify(name)
         api_key = _generate_api_key()
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO tenants (name, slug, api_key) "
-                "VALUES (%s, %s, %s) "
+                "INSERT INTO tenants (name, slug, api_key, is_test) "
+                "VALUES (%s, %s, %s, %s) "
                 "RETURNING id, name, slug, api_key, created_at, "
-                "         daily_limit_override, suspended, notes",
-                (name, chosen_slug, api_key),
+                "         daily_limit_override, suspended, notes, is_test",
+                (name, chosen_slug, api_key, is_test),
             )
             row = cur.fetchone()
             assert row is not None
@@ -93,6 +93,7 @@ class PostgresStore:
         clear_daily_limit_override: bool = False,
         suspended: bool | None = None,
         notes: str | None = None,
+        is_test: bool | None = None,
     ) -> Tenant | None:
         """Admin-only updater. Pass `clear_daily_limit_override=True` to
         explicitly NULL the column (since None means 'don't change')."""
@@ -116,6 +117,9 @@ class PostgresStore:
         if notes is not None:
             sets.append("notes = %s")
             args.append(notes)
+        if is_test is not None:
+            sets.append("is_test = %s")
+            args.append(is_test)
 
         if not sets:
             return self.get_tenant(tenant_id)
@@ -125,7 +129,7 @@ class PostgresStore:
             cur.execute(
                 f"UPDATE tenants SET {', '.join(sets)} WHERE id = %s "
                 "RETURNING id, name, slug, api_key, created_at, "
-                "         daily_limit_override, suspended, notes",
+                "         daily_limit_override, suspended, notes, is_test",
                 args,
             )
             row = cur.fetchone()
@@ -134,7 +138,7 @@ class PostgresStore:
     def get_tenant(self, tenant_id: TenantId) -> Tenant | None:
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT id, name, slug, api_key, created_at, daily_limit_override, suspended, notes "
+                "SELECT id, name, slug, api_key, created_at, daily_limit_override, suspended, notes, is_test "
                 "FROM tenants WHERE id = %s",
                 (str(tenant_id),),
             )
@@ -144,7 +148,7 @@ class PostgresStore:
     def get_tenant_by_api_key(self, api_key: str) -> Tenant | None:
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT id, name, slug, api_key, created_at, daily_limit_override, suspended, notes "
+                "SELECT id, name, slug, api_key, created_at, daily_limit_override, suspended, notes, is_test "
                 "FROM tenants WHERE api_key = %s",
                 (api_key,),
             )
@@ -154,7 +158,7 @@ class PostgresStore:
     def list_tenants(self) -> list[Tenant]:
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT id, name, slug, api_key, created_at, daily_limit_override, suspended, notes "
+                "SELECT id, name, slug, api_key, created_at, daily_limit_override, suspended, notes, is_test "
                 "FROM tenants ORDER BY created_at"
             )
             rows = cur.fetchall()
@@ -390,6 +394,21 @@ class PostgresStore:
             rows = cur.fetchall()
         return [_row_to_run(r) for r in rows]
 
+    def get_successful_runs_by_industry(self, industry: str, limit: int = 3) -> list[RunRecord]:
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT runs.id, runs.tenant_id, runs.business_id, runs.status, runs.started_at, runs.finished_at, "
+                "       runs.error, runs.output, runs.total_input_tokens, runs.total_output_tokens, "
+                "       runs.total_cost_usd, runs.llm_call_count "
+                "FROM runs "
+                "JOIN businesses ON runs.business_id = businesses.id "
+                "WHERE businesses.industry = %s AND runs.status = 'complete' "
+                "ORDER BY runs.finished_at DESC LIMIT %s",
+                (industry, limit),
+            )
+            rows = cur.fetchall()
+        return [_row_to_run(r) for r in rows]
+
     # ----- diagnostics ---------------------------------------------------
 
     def stats(self) -> dict[str, int]:
@@ -408,14 +427,19 @@ class PostgresStore:
 def _row_to_tenant(row: Iterable | None) -> Tenant | None:
     if row is None:
         return None
-    # Two row shapes for backward-compat: 5 cols (pre-migration) or 8 cols
-    # (with daily_limit_override, suspended, notes). Detect by length.
+    # Backward-compat row shapes: 5, 8, or 9 columns
     cols = list(row)
     tid, name, slug, api_key, created_at = cols[:5]
     daily_limit_override: int | None = None
     suspended: bool = False
     notes: str | None = None
-    if len(cols) >= 8:
+    is_test: bool = False
+    if len(cols) >= 9:
+        daily_limit_override = cols[5]
+        suspended = bool(cols[6])
+        notes = cols[7]
+        is_test = bool(cols[8])
+    elif len(cols) >= 8:
         daily_limit_override = cols[5]
         suspended = bool(cols[6])
         notes = cols[7]
@@ -428,6 +452,7 @@ def _row_to_tenant(row: Iterable | None) -> Tenant | None:
         daily_limit_override=daily_limit_override,
         suspended=suspended,
         notes=notes,
+        is_test=is_test,
     )
 
 

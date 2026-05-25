@@ -79,7 +79,7 @@ function bzpStatusPill(status) {
 document.addEventListener('alpine:init', () => {
 
   Alpine.data('loginPage', () => ({
-    mode: 'login', apiKey: '', name: '', signupCode: '', signupRequiresCode: false, busy: false, error: '',
+    mode: 'login', apiKey: '', name: '', signupCode: '', signupRequiresCode: false, isTest: false, busy: false, error: '',
     async init() {
       if (bzpApiKey()) {
         try { const me = await bzpFetch('/v1/tenants/me'); bzpSetTenant(me); window.location.href = '/ui/dashboard.html'; return; }
@@ -97,7 +97,7 @@ document.addEventListener('alpine:init', () => {
       try {
         const headers = { 'Content-Type': 'application/json' };
         if (this.signupRequiresCode) headers['X-Signup-Code'] = this.signupCode.trim();
-        const r = await fetch('/v1/tenants', { method: 'POST', headers, body: JSON.stringify({ name: this.name.trim() }) });
+        const r = await fetch('/v1/tenants', { method: 'POST', headers, body: JSON.stringify({ name: this.name.trim(), is_test: !!this.isTest }) });
         const tenant = await r.json();
         if (!r.ok || !tenant.api_key) throw new Error(tenant.detail || JSON.stringify(tenant));
         bzpSetApiKey(tenant.api_key); bzpSetTenant(tenant); window.location.href = '/ui/dashboard.html';
@@ -198,6 +198,7 @@ document.addEventListener('alpine:init', () => {
     authed: false, enabled: true, requiresTotp: false, adminKey: '', totp: '', busy: false, error: '',
     tenants: [], industries: [], locations: { countries: [], states: {} }, activeTab: 'tenants', audit: [], auditLoaded: false,
     cleanupPattern: '', cleanupPreview: [], cleanupBusy: false,
+    searchQuery: '', selectedTenantIds: [], editingTenant: null, bulkEditingTenants: null, tenantSubTab: 'actual',
     systemStatus: [
       { name: 'api', healthy: true, details: 'BizPulse Core API' },
       { name: 'qdrant', healthy: false, details: 'Vector Database' },
@@ -283,7 +284,9 @@ document.addEventListener('alpine:init', () => {
         const [tenants, industries, locations] = await Promise.all([
           adminFetch('/v1/admin/tenants'), adminFetch('/v1/admin/industries'), adminFetch('/v1/admin/metadata/locations')
         ]);
-        this.tenants = tenants; this.industries = industries; this.locations = locations;
+        this.tenants = Array.isArray(tenants) ? tenants : [];
+        this.industries = Array.isArray(industries) ? industries : [];
+        this.locations = locations || { countries: [], states: {} };
       } finally { this.busy = false; }
     },
     async loadAudit() { try { this.audit = await adminFetch('/v1/admin/audit?limit=200'); this.auditLoaded = true; } catch (e) { bzpToast(e.message); } },
@@ -299,10 +302,212 @@ document.addEventListener('alpine:init', () => {
       try { const updated = await adminFetch('/v1/admin/tenants/' + tenant.id, { method: 'PATCH', body: JSON.stringify({ suspended: !tenant.suspended }) }); Object.assign(tenant, updated); bzpToast('Toggled'); }
       catch (e) { bzpToast(e.message); }
     },
+    filteredTenants() {
+      const isTestTab = this.tenantSubTab === 'test';
+      const tenantsList = Array.isArray(this.tenants) ? this.tenants : [];
+      const tenantsOfTab = tenantsList.filter(t => t && !!t.is_test === isTestTab);
+      const q = (this.searchQuery || '').trim().toLowerCase();
+      if (!q) return tenantsOfTab;
+      return tenantsOfTab.filter(t => 
+        t && (
+          (t.name || '').toLowerCase().includes(q) || 
+          (t.slug || '').toLowerCase().includes(q) || 
+          (t.api_key || '').toLowerCase().includes(q)
+        )
+      );
+    },
+    isAllSelected() {
+      const filtered = this.filteredTenants();
+      if (filtered.length === 0) return false;
+      const selectedIds = Array.isArray(this.selectedTenantIds) ? this.selectedTenantIds : [];
+      return filtered.every(t => t && selectedIds.includes(t.id));
+    },
+    toggleSelectAll() {
+      const filtered = this.filteredTenants();
+      const selectedIds = Array.isArray(this.selectedTenantIds) ? this.selectedTenantIds : [];
+      if (this.isAllSelected()) {
+        const filteredIds = filtered.map(t => t.id);
+        this.selectedTenantIds = selectedIds.filter(id => !filteredIds.includes(id));
+      } else {
+        const currentIds = new Set(selectedIds);
+        filtered.forEach(t => { if (t) currentIds.add(t.id); });
+        this.selectedTenantIds = Array.from(currentIds);
+      }
+    },
     async deleteOne(tenant) {
       if (!confirm('Delete tenant?')) return;
-      try { await adminFetch('/v1/admin/tenants/' + tenant.id, { method: 'DELETE' }); this.tenants = this.tenants.filter(t => t.id !== tenant.id); bzpToast('Deleted'); }
-      catch (e) { bzpToast(e.message); }
+      try {
+        await adminFetch('/v1/admin/tenants/' + tenant.id, { method: 'DELETE' });
+        const tenantsList = Array.isArray(this.tenants) ? this.tenants : [];
+        this.tenants = tenantsList.filter(t => t && t.id !== tenant.id);
+        const selectedIds = Array.isArray(this.selectedTenantIds) ? this.selectedTenantIds : [];
+        this.selectedTenantIds = selectedIds.filter(id => id !== tenant.id);
+        bzpToast('Deleted');
+      } catch (e) { bzpToast(e.message); }
+    },
+    async deleteSelected() {
+      const selectedIds = Array.isArray(this.selectedTenantIds) ? this.selectedTenantIds : [];
+      if (selectedIds.length === 0) return;
+      if (!confirm(`Delete ${selectedIds.length} selected tenant(s)?`)) return;
+      try {
+        await adminFetch('/v1/admin/tenants/bulk-delete', {
+          method: 'POST',
+          body: JSON.stringify({ tenant_ids: selectedIds })
+        });
+        const ids = new Set(selectedIds);
+        const tenantsList = Array.isArray(this.tenants) ? this.tenants : [];
+        this.tenants = tenantsList.filter(t => t && !ids.has(t.id));
+        this.selectedTenantIds = [];
+        bzpToast('Selected tenants deleted');
+      } catch (e) { bzpToast(e.message); }
+    },
+    async deleteAll() {
+      const filtered = this.filteredTenants();
+      if (filtered.length === 0) return;
+      if (!confirm(`Are you sure you want to delete all ${filtered.length} matching tenant(s)?`)) return;
+      try {
+        const filteredIds = filtered.map(t => t.id);
+        await adminFetch('/v1/admin/tenants/bulk-delete', {
+          method: 'POST',
+          body: JSON.stringify({ tenant_ids: filteredIds })
+        });
+        const ids = new Set(filteredIds);
+        const tenantsList = Array.isArray(this.tenants) ? this.tenants : [];
+        this.tenants = tenantsList.filter(t => t && !ids.has(t.id));
+        const selectedIds = Array.isArray(this.selectedTenantIds) ? this.selectedTenantIds : [];
+        this.selectedTenantIds = selectedIds.filter(id => !ids.has(id));
+        bzpToast('All matching tenants deleted');
+      } catch (e) { bzpToast(e.message); }
+    },
+    editSelected() {
+      const selectedIds = Array.isArray(this.selectedTenantIds) ? this.selectedTenantIds : [];
+      if (selectedIds.length === 0) return;
+      this.openBulkEditModal(selectedIds);
+    },
+    editAll() {
+      const filtered = this.filteredTenants();
+      if (filtered.length === 0) return;
+      const filteredIds = filtered.map(t => t.id);
+      this.openBulkEditModal(filteredIds);
+    },
+    openBulkEditModal(ids) {
+      this.bulkEditingTenants = {
+        targetIds: ids,
+        updateLimit: false,
+        daily_limit_override: '',
+        clear_daily_limit_override: false,
+        updateSuspended: false,
+        suspended: false,
+        updateIsTest: false,
+        is_test: false,
+        updateNotes: false,
+        notes: ''
+      };
+    },
+    closeBulkEditModal() {
+      this.bulkEditingTenants = null;
+    },
+    async saveBulkEditModal() {
+      if (!this.bulkEditingTenants) return;
+      const targetIds = this.bulkEditingTenants.targetIds;
+      
+      const body = {
+        tenant_ids: targetIds
+      };
+      
+      if (this.bulkEditingTenants.updateLimit) {
+        body.update_limit = true;
+        const overrideVal = String(this.bulkEditingTenants.daily_limit_override || '').trim();
+        if (this.bulkEditingTenants.clear_daily_limit_override || overrideVal === '') {
+          body.clear_daily_limit_override = true;
+          body.daily_limit_override = null;
+        } else {
+          body.daily_limit_override = parseInt(overrideVal, 10);
+          body.clear_daily_limit_override = false;
+        }
+      }
+      
+      if (this.bulkEditingTenants.updateSuspended) {
+        body.update_suspended = true;
+        body.suspended = this.bulkEditingTenants.suspended === true || this.bulkEditingTenants.suspended === 'true';
+      }
+      
+      if (this.bulkEditingTenants.updateIsTest) {
+        body.update_is_test = true;
+        body.is_test = this.bulkEditingTenants.is_test === true || this.bulkEditingTenants.is_test === 'true';
+      }
+      
+      if (this.bulkEditingTenants.updateNotes) {
+        body.update_notes = true;
+        body.notes = (this.bulkEditingTenants.notes || '').trim() || null;
+      }
+      
+      try {
+        const updatedList = await adminFetch('/v1/admin/tenants/bulk-patch', {
+          method: 'PATCH',
+          body: JSON.stringify(body)
+        });
+        
+        const tenantsList = Array.isArray(this.tenants) ? this.tenants : [];
+        const updatedMap = new Map(updatedList.map(t => [t.id, t]));
+        
+        this.tenants = tenantsList.map(t => {
+          if (t && updatedMap.has(t.id)) {
+            return updatedMap.get(t.id);
+          }
+          return t;
+        });
+        
+        this.closeBulkEditModal();
+        this.selectedTenantIds = [];
+        bzpToast(`Updated ${updatedList.length} tenant(s)`);
+      } catch (e) {
+        bzpToast(e.message);
+      }
+    },
+    openEditModal(tenant) {
+      this.editingTenant = {
+        id: tenant.id,
+        name: tenant.name,
+        daily_limit_override: tenant.daily_limit_override !== null ? tenant.daily_limit_override : '',
+        notes: tenant.notes || '',
+        suspended: !!tenant.suspended,
+        is_test: !!tenant.is_test
+      };
+    },
+    closeEditModal() {
+      this.editingTenant = null;
+    },
+    async saveEditModal() {
+      if (!this.editingTenant) return;
+      const id = this.editingTenant.id;
+      const overrideVal = String(this.editingTenant.daily_limit_override || '').trim();
+      const body = {
+        name: (this.editingTenant.name || '').trim(),
+        suspended: !!this.editingTenant.suspended,
+        notes: (this.editingTenant.notes || '').trim() || null,
+        is_test: !!this.editingTenant.is_test
+      };
+      if (overrideVal === '') {
+        body.clear_daily_limit_override = true;
+        body.daily_limit_override = null;
+      } else {
+        body.daily_limit_override = parseInt(overrideVal, 10);
+        body.clear_daily_limit_override = false;
+      }
+      try {
+        const updated = await adminFetch('/v1/admin/tenants/' + id, {
+          method: 'PATCH',
+          body: JSON.stringify(body)
+        });
+        const tenantsList = Array.isArray(this.tenants) ? this.tenants : [];
+        const idx = tenantsList.findIndex(t => t && t.id === id);
+        if (idx !== -1) {
+          this.tenants[idx] = updated;
+        }
+        this.closeEditModal();
+        bzpToast('Tenant updated');
+      } catch (e) { bzpToast(e.message); }
     },
     async copyKey(t) { try { await navigator.clipboard.writeText(t.api_key); bzpToast('Copied'); } catch (e) {} },
     async impersonate(t) {

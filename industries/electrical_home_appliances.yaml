@@ -1,0 +1,55 @@
+slug: electrical_home_appliances
+name: Electrical Home Appliances
+description: Premium lifestyle electrical and home appliances brand delivering durable, high-performance products with innovative features and stylish designs for modern Indian households.
+
+ontology:
+  entities:
+    - product (refrigerator, washing-machine, AC, microwave, fan, heater)
+    - feature (inverter, smart-connectivity, energy-star, warranty)
+    - channel (retail, e-commerce, direct-to-consumer)
+    - persona (modern-home-maker, tech-enthusiast, budget-conscious)
+    - service (installation, maintenance, repair)
+  regulations:
+    - BEE Star Rating
+    - BIS certification
+    - E-waste management rules
+    - Consumer protection act
+  metrics:
+    - sales_volume
+    - market_share
+    - brand_recall_score
+    - energy_efficiency_index
+    - customer_service_rating
+
+competitor_seeds:
+  - lg.com
+  - samsung.com
+  - whirlpool.com
+  - havells.com
+  - bajajelectricals.com
+  - orientelectric.com
+
+channel_weights:
+  google_search: 0.85
+  amazon_ads: 0.95
+  flipkart_ads: 0.95
+  instagram: 0.8
+  facebook: 0.75
+  youtube: 0.85
+  tv: 0.7
+
+content_pillars:
+  - product_innovation
+  - energy_efficiency
+  - lifestyle_integration
+  - reliability_and_service
+  - seasonal_campaigns
+
+prompt_addendum: |
+  This is a home appliances business. Every recommendation must:
+    - Highlight energy efficiency and BEE star ratings.
+    - Focus on reliability, durability, and after-sales service.
+    - Align with modern lifestyle and aesthetic preferences.
+    - Leverage e-commerce platforms for high-intent traffic.
+
+golden_eval_seeds: []

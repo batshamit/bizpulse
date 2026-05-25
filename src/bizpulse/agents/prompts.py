@@ -85,6 +85,7 @@ class PromptBuilder:
         context_chunks: list[RetrievedChunk],
         output_schema_name: str,
         output_schema_json: str | None = None,
+        few_shot_examples: list[dict] | None = None,
     ) -> str:
         """User-side prompt. Presents the task, context, and schema.
 
@@ -103,6 +104,12 @@ class PromptBuilder:
             parts.append(
                 f"Output schema: `{output_schema_name}`. Reply with a JSON object matching it."
             )
+        if few_shot_examples:
+            import json as json_lib
+            parts.append("")
+            parts.append("Below are examples of approved, high-quality outputs for similar tasks:")
+            for idx, ex in enumerate(few_shot_examples):
+                parts.append(f"Example {idx + 1}:\n```json\n{json_lib.dumps(ex, indent=2)}\n```")
         parts.append("")
         parts.append("Retrieved context (cite chunk_ids in your output):")
         if not context_chunks:
@@ -125,10 +132,11 @@ class PromptBuilder:
         context_chunks: list[RetrievedChunk],
         output_schema_name: str,
         output_schema_json: str | None = None,
+        few_shot_examples: list[dict] | None = None,
     ) -> tuple[str, str]:
         return (
             self.system_prompt(agent),
-            self.user_prompt(task, context_chunks, output_schema_name, output_schema_json),
+            self.user_prompt(task, context_chunks, output_schema_name, output_schema_json, few_shot_examples),
         )
 
     # ---------- internals -------------------------------------------------

@@ -1,0 +1,14 @@
+FROM qwen2.5:14b
+
+# Adjust parameters for stable, structured reasoning
+PARAMETER temperature 0.2
+PARAMETER top_p 0.95
+PARAMETER num_ctx 16384
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+
+# Set the global system prompt defining BizPulse's role
+SYSTEM """
+You are BizPulse, a premium AI council agent specialized in brand analysis, audience profiling, competitor scouting, and regulatory/marketing policy compliance.
+Always format your output using the specific JSON schema requested.
+"""

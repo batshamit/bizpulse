@@ -225,3 +225,85 @@ async def test_graph_continues_when_one_node_fails(
     assert final["final_strategy"] is not None
     # The error is captured.
     assert any("audience_analyst" in e for e in final.get("errors", []))
+
+
+@pytest.mark.asyncio
+async def test_graph_few_shot_injection(
+    runner_with_chunks: AgentRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from bizpulse.models.strategy import MarketingStrategy
+
+    # 1. Create a dummy few shot MarketingStrategy
+    dummy_strategy = MarketingStrategy.model_validate({
+        "tenant_id": str(runner_with_chunks.retrieval.repo.tenant_id),
+        "business_id": str(uuid4()),
+        "industry": "fintech",
+        "brand": {
+            "positioning": "past-positioning",
+            "tone": "past-tone",
+            "value_props": ["past-prop"],
+            "citations": [{"chunk_id": _CHUNK_ID, "quote": "past-quote", "confidence": 0.99}]
+        },
+        "audience": {
+            "primary": {
+                "name": "Past ICP",
+                "description": "past desc",
+                "motivations": [],
+                "pain_points": [],
+                "citations": [{"chunk_id": _CHUNK_ID, "quote": "past-quote", "confidence": 0.99}]
+            },
+            "citations": [{"chunk_id": _CHUNK_ID, "quote": "past-quote", "confidence": 0.99}]
+        },
+        "recommendations": [
+            {
+                "channel": "linkedin",
+                "action": "past action",
+                "rationale": "past rationale",
+                "evidence_chunk_ids": [_CHUNK_ID],
+                "confidence": 0.99
+            }
+        ],
+        "overall_confidence": 0.99,
+        "summary": "past summary"
+    })
+
+    # 2. Intercept the AgentRunner.run method to inspect kw["few_shot_examples"]
+    captured_few_shots = {}
+    real_run = runner_with_chunks.run
+
+    async def mock_run(**kw):
+        agent = kw.get("agent")
+        few_shots = kw.get("few_shot_examples")
+        captured_few_shots[agent] = few_shots
+        return await real_run(**kw)
+
+    monkeypatch.setattr(runner_with_chunks, "run", mock_run)
+
+    # 3. Invoke graph with few_shots in the initial state
+    graph = build_analysis_graph(runner_with_chunks)
+    initial = {
+        "tenant_id": runner_with_chunks.retrieval.repo.tenant_id,
+        "business_id": uuid4(),
+        "industry": "fintech",
+        "business_url": "https://example.test",
+        "few_shots": [dummy_strategy]
+    }
+    await graph.ainvoke(initial)
+
+    # 4. Assertions on captured_few_shots
+    # Brand analyst should have received the brand sub-component
+    assert captured_few_shots["brand_analyst"] is not None
+    assert len(captured_few_shots["brand_analyst"]) == 1
+    assert captured_few_shots["brand_analyst"][0]["positioning"] == "past-positioning"
+
+    # Audience analyst should have received the audience sub-component
+    assert captured_few_shots["audience_analyst"] is not None
+    assert len(captured_few_shots["audience_analyst"]) == 1
+    assert captured_few_shots["audience_analyst"][0]["primary"]["name"] == "Past ICP"
+
+    # Strategist should have received the full MarketingStrategy dump
+    assert captured_few_shots["strategist"] is not None
+    assert len(captured_few_shots["strategist"]) == 1
+    assert captured_few_shots["strategist"][0]["summary"] == "past summary"
+    assert captured_few_shots["strategist"][0]["brand"]["positioning"] == "past-positioning"
+

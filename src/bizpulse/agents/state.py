@@ -38,6 +38,8 @@ class AnalysisState(TypedDict, total=False):
     """ISO 3166-1 alpha-2; default 'IN' if absent."""
     state: str | None
     """State/province slug for state-specific regulators (e.g., 'maharashtra')."""
+    few_shots: list[MarketingStrategy] | None
+    """Successful historical strategies for the same industry to guide in-context learning."""
 
     # ---- per-agent outputs (each node fills its slot) ----
     brand: BrandAnalysis | None

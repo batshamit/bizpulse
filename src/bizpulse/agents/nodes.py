@@ -117,12 +117,32 @@ def _make_analyst(
     def factory(runner: AgentRunner) -> NodeFn:
         async def node(state: AnalysisState) -> dict[str, object]:
             t0 = time.perf_counter()
+            few_shot_examples = None
+            if state.get("few_shots"):
+                few_shot_examples = []
+                import json
+                for fs in state["few_shots"]:
+                    sub_val = None
+                    if isinstance(fs, dict):
+                        sub_val = fs.get(state_key)
+                    else:
+                        sub_val = getattr(fs, state_key, None)
+                    if sub_val is not None:
+                        if hasattr(sub_val, "model_dump_json"):
+                            few_shot_examples.append(json.loads(sub_val.model_dump_json()))
+                        elif hasattr(sub_val, "dict"):
+                            few_shot_examples.append(json.loads(json.dumps(sub_val.dict(), default=str)))
+                        elif isinstance(sub_val, dict):
+                            few_shot_examples.append(json.loads(json.dumps(sub_val, default=str)))
+                        else:
+                            few_shot_examples.append(sub_val)
             try:
                 r = await runner.run(
                     agent=agent_name,  # type: ignore[arg-type]
                     task=task,
                     output_schema=output_schema,
                     query_text=query_text,
+                    few_shot_examples=few_shot_examples,
                 )
                 trace = _trace(
                     agent=agent_name,
@@ -285,6 +305,19 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
     async def strategist(state: AnalysisState) -> dict[str, object]:
         prior = _summarize_prior_compact(state)
         t0 = time.perf_counter()
+        few_shot_examples = None
+        if state.get("few_shots"):
+            few_shot_examples = []
+            import json
+            for fs in state["few_shots"]:
+                if hasattr(fs, "model_dump_json"):
+                    few_shot_examples.append(json.loads(fs.model_dump_json()))
+                elif hasattr(fs, "dict"):
+                    few_shot_examples.append(json.loads(json.dumps(fs.dict(), default=str)))
+                elif isinstance(fs, dict):
+                    few_shot_examples.append(json.loads(json.dumps(fs, default=str)))
+                else:
+                    few_shot_examples.append(fs)
         try:
             r = await runner.run(
                 agent="strategist",
@@ -329,6 +362,7 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
                 output_schema=MarketingStrategy,
                 query_text="detailed marketing strategy LinkedIn social media YouTube Instagram Facebook X Threads Google Search WhatsApp B2B Email 4L benefits",
                 top_k=8,
+                few_shot_examples=few_shot_examples,
             )
             # Merge the prior analyst outputs back into the strategy so the
             # final report carries the full structure even though the LLM

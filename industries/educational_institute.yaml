@@ -1,0 +1,54 @@
+slug: educational_institute
+name: Educational Institute
+description: focusing on value-based, comprehensive education to create a "complete person". It integrates modern science with Eastern spiritual wisdom, offering diverse programs (engineering, science, arts, education) in a serene environment, emphasizing research, entrepreneurship, and rural development.
+
+ontology:
+  entities:
+    - course (degree, diploma, certificate)
+    - faculty (professor, researcher, lecturer)
+    - student (undergraduate, postgraduate, doctoral)
+    - facility (lab, library, hostel, sports)
+    - event (seminar, workshop, cultural-fest)
+  regulations:
+    - UGC guidelines
+    - AICTE norms
+    - NEP 2020
+    - Local state university regulations
+  metrics:
+    - enrollment_rate
+    - placement_percentage
+    - student_satisfaction_score
+    - research_output (papers, patents)
+    - faculty_student_ratio
+
+competitor_seeds:
+  - bits-pilani.ac.in
+  - iitb.ac.in
+  - ashoka.edu.in
+  - isb.edu
+  - vit.ac.in
+
+channel_weights:
+  google_search: 0.9
+  linkedin: 0.8
+  facebook: 0.7
+  youtube: 0.85
+  instagram: 0.75
+  twitter: 0.5
+  newspaper: 0.6
+
+content_pillars:
+  - academic_excellence
+  - campus_life
+  - placements_and_career
+  - research_and_innovation
+  - spiritual_and_holistic_growth
+
+prompt_addendum: |
+  This is an educational institute. Every recommendation must:
+    - Align with NEP 2020 objectives.
+    - Highlight holistic development and spiritual integration.
+    - Focus on research and entrepreneurship opportunities.
+    - Showcase rural development initiatives.
+
+golden_eval_seeds: []

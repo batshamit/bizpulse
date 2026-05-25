@@ -343,6 +343,14 @@ async def run_analysis_background(
     # LLM call across the whole run.
     graph = build_analysis_graph(runner, sequential=True)
 
+    # Fetch up to 2 successful completed runs in the same industry to guide in-context learning
+    few_shots = None
+    try:
+        past_runs = store.get_successful_runs_by_industry(business.industry or "fintech", limit=2)
+        few_shots = [pr.final_output for pr in past_runs if pr.final_output]
+    except Exception as exc:
+        log.warning("runner.few_shots.failed", error=str(exc))
+
     initial_state = {
         "tenant_id": business.tenant_id,
         "business_id": business.id,
@@ -350,6 +358,7 @@ async def run_analysis_background(
         "business_url": business.url,
         "country": country,
         "state": state,
+        "few_shots": few_shots,
     }
     try:
         final = await _invoke_graph_with_retry(graph, initial_state)

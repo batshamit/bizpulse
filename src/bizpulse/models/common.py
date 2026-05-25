@@ -52,6 +52,7 @@ class Tenant(StrictModel):
     daily_limit_override: int | None = Field(default=None, ge=0)
     suspended: bool = Field(default=False)
     notes: str | None = Field(default=None, max_length=2000)
+    is_test: bool = Field(default=False)
 
 
 def _get_supported_industries() -> tuple[str, ...]:

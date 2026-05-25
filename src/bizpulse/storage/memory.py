@@ -47,12 +47,12 @@ class InMemoryStore:
 
     # ----- tenants -------------------------------------------------------
 
-    def create_tenant(self, name: str, slug: str | None = None) -> Tenant:
+    def create_tenant(self, name: str, slug: str | None = None, is_test: bool = False) -> Tenant:
         with self._lock:
             chosen_slug = slug or slugify(name)
             if chosen_slug in self._tenants_by_slug:
                 raise ValueError(f"slug already in use: {chosen_slug}")
-            tenant = Tenant(name=name, slug=chosen_slug, api_key=_generate_api_key())
+            tenant = Tenant(name=name, slug=chosen_slug, api_key=_generate_api_key(), is_test=is_test)
             self._tenants[tenant.id] = tenant
             self._tenants_by_api_key[tenant.api_key] = tenant.id
             self._tenants_by_slug[tenant.slug] = tenant.id
@@ -181,6 +181,7 @@ class InMemoryStore:
         clear_daily_limit_override: bool = False,
         suspended: bool | None = None,
         notes: str | None = None,
+        is_test: bool | None = None,
     ) -> Tenant | None:
         with self._lock:
             t = self._tenants.get(tenant_id)
@@ -197,6 +198,8 @@ class InMemoryStore:
                 updates["suspended"] = suspended
             if notes is not None:
                 updates["notes"] = notes
+            if is_test is not None:
+                updates["is_test"] = is_test
             if not updates:
                 return t
             new_t = t.model_copy(update=updates)
@@ -275,6 +278,17 @@ class InMemoryStore:
     def list_runs_for_business(self, business_id: BusinessId) -> list[RunRecord]:
         ids = self._runs_by_business.get(business_id, [])
         return [self._runs[r] for r in ids if r in self._runs]
+
+    def get_successful_runs_by_industry(self, industry: str, limit: int = 3) -> list[RunRecord]:
+        out = []
+        with self._lock:
+            for run in self._runs.values():
+                if run.status == "complete":
+                    biz = self._businesses.get(run.business_id)
+                    if biz and biz.industry == industry:
+                        out.append(run)
+        out.sort(key=lambda r: r.finished_at or r.started_at, reverse=True)
+        return out[:limit]
 
     def count_runs_for_tenant_since(self, tenant_id: TenantId, since: datetime) -> int:
         """Number of runs created by this tenant after `since`. Used for

@@ -326,3 +326,77 @@ a:hover { color: var(--bzp-accent-dark); text-decoration: underline; }
   .bzp-nav-inner { padding: 0 1rem; }
   .bzp-nav-links a { margin-left: 0.8rem; font-size: 0.85rem; }
 }
+
+/* Modal dialog styles */
+.bzp-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(25, 25, 23, 0.4);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.bzp-modal {
+  background: var(--bzp-surface);
+  border: 1px solid var(--bzp-border);
+  border-radius: var(--bzp-radius-lg);
+  box-shadow: var(--bzp-shadow-lg);
+  width: 100%;
+  max-width: 540px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 2rem;
+  position: relative;
+  animation: bzp-modal-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes bzp-modal-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Tab Buttons */
+.bzp-admin-tab-btn {
+  background: none;
+  border: none;
+  padding: 0.7rem 1rem;
+  cursor: pointer;
+  font-size: 0.95rem;
+  text-transform: capitalize;
+  color: var(--bzp-ink-soft);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+}
+.bzp-admin-tab-btn:hover {
+  color: var(--bzp-ink);
+}
+.bzp-admin-tab-btn.active {
+  border-bottom: 2px solid var(--bzp-accent);
+  color: var(--bzp-accent);
+  font-weight: 500;
+}
+
+/* Tenant Sub-tab Buttons */
+.bzp-tenant-subtab-btn {
+  background: none;
+  border: none;
+  padding: 0.6rem 1.25rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--bzp-ink-soft);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+}
+.bzp-tenant-subtab-btn:hover {
+  color: var(--bzp-ink);
+}
+.bzp-tenant-subtab-btn.active {
+  border-bottom: 2px solid var(--bzp-accent);
+  color: var(--bzp-accent);
+  font-weight: 600;
+}
+

@@ -51,7 +51,7 @@ tmux send-keys  -t "$SESSION:tei-rerank" \
 # Window 4: FastAPI dev server (no GPU)
 tmux new-window -t "$SESSION" -n api -c "$PWD"
 tmux send-keys  -t "$SESSION:api" \
-    ".venv/bin/uvicorn bizpulse.api.main:app --host 127.0.0.1 --port 8080 --reload 2>&1 | tee -a logs/api.log"
+    "set -a; . .env; set +a; .venv/bin/uvicorn bizpulse.api.main:app --host 127.0.0.1 --port 8080 --reload 2>&1 | tee -a logs/api.log"
 
 # Window 5: free shell
 tmux new-window -t "$SESSION" -n shell -c "$PWD"

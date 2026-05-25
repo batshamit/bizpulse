@@ -56,6 +56,7 @@ class CreateTenantRequest(BaseModel):
         pattern=r"^[a-z0-9][a-z0-9-]*$",
         description="Optional URL-friendly identifier. Auto-generated from `name` if omitted.",
     )
+    is_test: bool = Field(default=False, description="Whether this is a development test tenant.")
 
 
 @router.post(
@@ -75,7 +76,7 @@ def create_tenant(
     store: Store = Depends(get_store),
     _: None = Depends(require_signup_code),
 ) -> Tenant:
-    return store.create_tenant(name=body.name, slug=body.slug)
+    return store.create_tenant(name=body.name, slug=body.slug, is_test=body.is_test)
 
 
 @router.get(

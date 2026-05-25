@@ -227,6 +227,7 @@ class AgentRunner:
         output_schema: type[T],
         query_text: str,
         top_k: int = 8,
+        few_shot_examples: list[dict] | None = None,
     ) -> AgentRunResult[T]:
         """Run one agent end-to-end. Returns typed output + audit trail."""
         t0 = time.perf_counter()
@@ -251,6 +252,7 @@ class AgentRunner:
             context_chunks=context_chunks,
             output_schema_name=output_schema.__name__,
             output_schema_json=schema_json,
+            few_shot_examples=few_shot_examples,
         )
 
         # 3. Run debate.

@@ -9,7 +9,7 @@
   <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap' rel='stylesheet'>
   <link rel='stylesheet' href='/ui/css/app.css'>
   <script defer src='https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js'></script>
-  <script src='/ui/js/app.js'></script>
+  <script src='/ui/js/app.js?v=1.0.1'></script>
 </head>
 <body>
 
@@ -64,15 +64,15 @@
       <div class='bzp-grid-stats'>
         <div class='bzp-stat'>
           <div class='bzp-stat-label'>Tenants</div>
-          <div class='bzp-stat-value' x-text='tenants.length'></div>
+          <div class='bzp-stat-value' x-text='Array.isArray(tenants) ? tenants.length : 0'></div>
         </div>
         <div class='bzp-stat'>
           <div class='bzp-stat-label'>Active (24h)</div>
-          <div class='bzp-stat-value' x-text='tenants.filter(t => t.runs_today > 0).length'></div>
+          <div class='bzp-stat-value' x-text='Array.isArray(tenants) ? tenants.filter(t => t && t.runs_today > 0).length : 0'></div>
         </div>
         <div class='bzp-stat'>
           <div class='bzp-stat-label'>Total cost</div>
-          <div class='bzp-stat-value' x-text="'\$' + tenants.reduce((s,t)=> s+(t.total_cost_usd||0), 0).toFixed(4)"></div>
+          <div class='bzp-stat-value' x-text="Array.isArray(tenants) ? '\$' + tenants.reduce((s,t)=> s+(t ? (t.total_cost_usd||0) : 0), 0).toFixed(4) : '$0.0000'"></div>
         </div>
       </div>
 
@@ -80,8 +80,7 @@
       <div style='display:flex; gap:0.4rem; border-bottom:1px solid var(--bzp-border); margin-bottom:1.5rem;'>
         <template x-for="t in ['tenants', 'system', 'resources', 'metadata', 'audit', 'cleanup']" :key='t'>
           <button @click='activeTab=t'
-                  :style="activeTab===t ? 'border-bottom:2px solid var(--bzp-accent); color:var(--bzp-accent); font-weight:500;' : 'color:var(--bzp-ink-soft);'"
-                  style='background:none; border:none; padding:0.7rem 1rem; cursor:pointer; font-size:0.95rem; text-transform:capitalize;'
+                  :class="activeTab === t ? 'bzp-admin-tab-btn active' : 'bzp-admin-tab-btn'"
                   x-text='t'></button>
         </template>
       </div>
@@ -107,11 +106,52 @@
 
       <!-- TENANTS tab -->
       <div x-show="activeTab === 'tenants'" class='bzp-card' style='padding:0;'>
+        <!-- Tenant Sub-tabs: Actual vs Test -->
+        <div style='display:flex; gap:0.25rem; padding:1.25rem 1.5rem 0 1.5rem; border-bottom:1px solid var(--bzp-border); background:var(--bzp-border-soft); border-top-left-radius:var(--bzp-radius-lg); border-top-right-radius:var(--bzp-radius-lg);'>
+          <button @click="tenantSubTab = 'actual'; selectedTenantIds = []"
+                  :class="tenantSubTab === 'actual' ? 'bzp-tenant-subtab-btn active' : 'bzp-tenant-subtab-btn'"
+                  x-text="'Actual Tenants (' + (Array.isArray(tenants) ? tenants.filter(t => t && !t.is_test).length : 0) + ')'">
+          </button>
+          <button @click="tenantSubTab = 'test'; selectedTenantIds = []"
+                  :class="tenantSubTab === 'test' ? 'bzp-tenant-subtab-btn active' : 'bzp-tenant-subtab-btn'"
+                  x-text="'Test Tenants (' + (Array.isArray(tenants) ? tenants.filter(t => t && t.is_test).length : 0) + ')'">
+          </button>
+        </div>
+
+        <div style='display:flex; justify-content:space-between; align-items:center; gap:1rem; padding:1.25rem 1.5rem; border-bottom:1px solid var(--bzp-border);'>
+          <div style='flex:1; max-width:400px;'>
+            <input type='text' x-model='searchQuery' placeholder='Search by name, slug, or API key...' class='bzp-input' style='padding:0.5rem 0.8rem;'>
+          </div>
+          <div style='display:flex; gap:0.5rem;'>
+            <button @click.stop='editSelected()' :disabled='selectedTenantIds.length === 0' class='bzp-btn bzp-btn-ghost' style='color:var(--bzp-accent); border-color:var(--bzp-accent-soft); padding:0.5rem 1rem;' x-text="'Edit Selected (' + selectedTenantIds.length + ')'"></button>
+            <button @click.stop='editAll()' :disabled='filteredTenants().length === 0' class='bzp-btn bzp-btn-ghost' style='color:var(--bzp-accent); border-color:var(--bzp-accent-soft); padding:0.5rem 1rem;'>Edit All</button>
+            <button @click='deleteSelected()' :disabled='selectedTenantIds.length === 0' class='bzp-btn bzp-btn-ghost' style='color:var(--bzp-danger); border-color:var(--bzp-danger-soft); padding:0.5rem 1rem;' x-text="'Delete Selected (' + selectedTenantIds.length + ')'"></button>
+            <button @click='deleteAll()' :disabled='filteredTenants().length === 0' class='bzp-btn bzp-btn-ghost' style='color:var(--bzp-danger); border-color:var(--bzp-danger-soft); padding:0.5rem 1rem;'>Delete All</button>
+          </div>
+        </div>
+
         <table class='bzp-table'>
-          <thead><tr><th>Tenant</th><th>Slug</th><th>Created</th><th>Runs</th><th>Cost</th><th>Limit</th><th>Status</th><th></th></tr></thead>
+          <thead>
+            <tr>
+              <th style='width:40px; padding-left:1.5rem; text-align:left;'>
+                <input type='checkbox' :checked='isAllSelected()' @click='toggleSelectAll()' style='width:16px; height:16px; cursor:pointer;'>
+              </th>
+              <th>Tenant</th>
+              <th>Slug</th>
+              <th>Created</th>
+              <th>Runs</th>
+              <th>Cost</th>
+              <th>Limit</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
           <tbody>
-            <template x-for='t in tenants' :key='t.id'>
+            <template x-for='t in filteredTenants()' :key='t.id'>
               <tr>
+                <td style='padding-left:1.5rem;'>
+                  <input type='checkbox' :value='t.id' x-model='selectedTenantIds' style='width:16px; height:16px; cursor:pointer;'>
+                </td>
                 <td>
                   <div style='font-weight:500;' x-text='t.name'></div>
                   <div style='display:flex; gap:0.3rem; align-items:center; margin-top:0.2rem;'>
@@ -125,14 +165,134 @@
                 <td x-text="'\$' + (t.total_cost_usd || 0).toFixed(4)"></td>
                 <td><input type='number' :value='t.daily_limit_override ?? ""' :placeholder="'(' + t.effective_daily_limit + ')'" @change='patchLimit(t, $event.target.value)' class='bzp-input' style='width:70px;'></td>
                 <td><span class='bzp-pill' :class='t.suspended ? "bzp-pill-danger" : "bzp-pill-success"' x-text='t.suspended ? "suspended" : "active"'></span></td>
-                <td style='text-align:right;'>
-                  <button @click='toggleSuspend(t)' class='bzp-btn bzp-btn-ghost'>Suspend</button>
-                  <button @click='impersonate(t)' class='bzp-btn bzp-btn-primary'>Sign in</button>
+                <td style='text-align:right; white-space:nowrap;'>
+                  <button @click='openEditModal(t)' class='bzp-btn bzp-btn-ghost' style='padding: 0.4rem 0.8rem;'>Edit</button>
+                  <button @click='toggleSuspend(t)' class='bzp-btn bzp-btn-ghost' style='padding: 0.4rem 0.8rem;' x-text='t.suspended ? "Activate" : "Suspend"'></button>
+                  <button @click='impersonate(t)' class='bzp-btn bzp-btn-primary' style='padding: 0.4rem 0.8rem;'>Sign in</button>
+                  <button @click='deleteOne(t)' class='bzp-btn bzp-btn-ghost' style='color:var(--bzp-danger); border-color:transparent; padding: 0.4rem 0.8rem;'>Delete</button>
                 </td>
               </tr>
             </template>
           </tbody>
         </table>
+      </div>
+
+      <!-- EDIT TENANT MODAL -->
+      <div x-show='editingTenant' class='bzp-modal-overlay' style='display:none;' x-transition>
+        <div class='bzp-modal' @click.away='closeEditModal()'>
+          <h3 style='margin-bottom:1.5rem;'>Edit Tenant Details</h3>
+          <template x-if='editingTenant'>
+            <form @submit.prevent='saveEditModal()'>
+              <div style='margin-bottom:1.25rem;'>
+                <label class='bzp-label' for='editName'>Tenant Name</label>
+                <input id='editName' x-model='editingTenant.name' type='text' class='bzp-input' required>
+              </div>
+              
+              <div style='margin-bottom:1.25rem;'>
+                <label class='bzp-label' for='editLimit'>Daily Limit Override</label>
+                <input id='editLimit' x-model='editingTenant.daily_limit_override' type='number' placeholder='Defaults to system limit' class='bzp-input'>
+                <span style='font-size:0.75rem; color:var(--bzp-ink-faint);'>Leave empty to use the system default daily limit.</span>
+              </div>
+
+              <div style='margin-bottom:1.25rem;'>
+                <label class='bzp-label' for='editNotes'>Notes</label>
+                <textarea id='editNotes' x-model='editingTenant.notes' class='bzp-textarea' rows='4' placeholder='Operator notes...'></textarea>
+              </div>
+
+              <div style='margin-bottom:1.25rem; display:flex; align-items:center; gap:0.5rem;'>
+                <input id='editSuspended' type='checkbox' x-model='editingTenant.suspended' style='width:18px; height:18px; cursor:pointer;'>
+                <label class='bzp-label' for='editSuspended' style='margin:0; cursor:pointer;'>Suspend this tenant (blocks all runs/api requests)</label>
+              </div>
+
+              <div style='margin-bottom:1.5rem; display:flex; align-items:center; gap:0.5rem;'>
+                <input id='editIsTest' type='checkbox' x-model='editingTenant.is_test' style='width:18px; height:18px; cursor:pointer;'>
+                <label class='bzp-label' for='editIsTest' style='margin:0; cursor:pointer;'>Mark as test tenant (development testing)</label>
+              </div>
+
+              <div style='display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid var(--bzp-border); padding-top:1.25rem;'>
+                <button type='button' @click='closeEditModal()' class='bzp-btn bzp-btn-ghost'>Cancel</button>
+                <button type='submit' class='bzp-btn bzp-btn-primary'>Save Changes</button>
+              </div>
+            </form>
+          </template>
+        </div>
+      </div>
+
+      <!-- BULK EDIT TENANT MODAL -->
+      <div x-show='bulkEditingTenants' class='bzp-modal-overlay' style='display:none;' x-transition>
+        <div class='bzp-modal' @click.away='closeBulkEditModal()'>
+          <template x-if='bulkEditingTenants'>
+            <div>
+              <h3 style='margin-bottom:1.5rem;' x-text="'Bulk Edit Tenants (' + bulkEditingTenants.targetIds.length + ' selected)'">Bulk Edit Tenants</h3>
+              <form @submit.prevent='saveBulkEditModal()'>
+                
+                <!-- Daily Limit Override -->
+                <div style='margin-bottom:1.25rem; border:1px solid var(--bzp-border); padding:0.75rem; border-radius:var(--bzp-radius);'>
+                  <div style='display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;'>
+                    <input id='bulkUpdateLimitCheckbox' type='checkbox' x-model='bulkEditingTenants.updateLimit' style='width:16px; height:16px; cursor:pointer;'>
+                    <label class='bzp-label' for='bulkUpdateLimitCheckbox' style='margin:0; cursor:pointer; font-weight:600;'>Update Daily Limit Override</label>
+                  </div>
+                  <div x-show='bulkEditingTenants.updateLimit' style='margin-top:0.5rem; padding-left:1.5rem;'>
+                    <label class='bzp-label' for='bulkLimit'>New Limit Override</label>
+                    <input id='bulkLimit' x-model='bulkEditingTenants.daily_limit_override' type='number' placeholder='Defaults to system limit' class='bzp-input'>
+                    <div style='margin-top:0.5rem; display:flex; align-items:center; gap:0.5rem;'>
+                      <input id='bulkClearLimit' type='checkbox' x-model='bulkEditingTenants.clear_daily_limit_override' style='width:16px; height:16px; cursor:pointer;'>
+                      <label class='bzp-label' for='bulkClearLimit' style='margin:0; cursor:pointer; font-size:0.8rem; color:var(--bzp-ink-soft);'>Clear limit override (revert to system default)</label>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Suspended -->
+                <div style='margin-bottom:1.25rem; border:1px solid var(--bzp-border); padding:0.75rem; border-radius:var(--bzp-radius);'>
+                  <div style='display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;'>
+                    <input id='bulkUpdateSuspendedCheckbox' type='checkbox' x-model='bulkEditingTenants.updateSuspended' style='width:16px; height:16px; cursor:pointer;'>
+                    <label class='bzp-label' for='bulkUpdateSuspendedCheckbox' style='margin:0; cursor:pointer; font-weight:600;'>Update Suspension Status</label>
+                  </div>
+                  <div x-show='bulkEditingTenants.updateSuspended' style='margin-top:0.5rem; padding-left:1.5rem; display:flex; gap:1.5rem;'>
+                    <label style='display:flex; align-items:center; gap:0.3rem; cursor:pointer; font-size:0.9rem;'>
+                      <input type='radio' name='bulkSuspended' :value='true' x-model='bulkEditingTenants.suspended' style='cursor:pointer;'> Suspend
+                    </label>
+                    <label style='display:flex; align-items:center; gap:0.3rem; cursor:pointer; font-size:0.9rem;'>
+                      <input type='radio' name='bulkSuspended' :value='false' x-model='bulkEditingTenants.suspended' style='cursor:pointer;'> Activate
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Is Test -->
+                <div style='margin-bottom:1.25rem; border:1px solid var(--bzp-border); padding:0.75rem; border-radius:var(--bzp-radius);'>
+                  <div style='display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;'>
+                    <input id='bulkUpdateIsTestCheckbox' type='checkbox' x-model='bulkEditingTenants.updateIsTest' style='width:16px; height:16px; cursor:pointer;'>
+                    <label class='bzp-label' for='bulkUpdateIsTestCheckbox' style='margin:0; cursor:pointer; font-weight:600;'>Update Test Status</label>
+                  </div>
+                  <div x-show='bulkEditingTenants.updateIsTest' style='margin-top:0.5rem; padding-left:1.5rem; display:flex; gap:1.5rem;'>
+                    <label style='display:flex; align-items:center; gap:0.3rem; cursor:pointer; font-size:0.9rem;'>
+                      <input type='radio' name='bulkIsTest' :value='true' x-model='bulkEditingTenants.is_test' style='cursor:pointer;'> Mark as Test
+                    </label>
+                    <label style='display:flex; align-items:center; gap:0.3rem; cursor:pointer; font-size:0.9rem;'>
+                      <input type='radio' name='bulkIsTest' :value='false' x-model='bulkEditingTenants.is_test' style='cursor:pointer;'> Mark as Actual
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Notes -->
+                <div style='margin-bottom:1.25rem; border:1px solid var(--bzp-border); padding:0.75rem; border-radius:var(--bzp-radius);'>
+                  <div style='display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;'>
+                    <input id='bulkUpdateNotesCheckbox' type='checkbox' x-model='bulkEditingTenants.updateNotes' style='width:16px; height:16px; cursor:pointer;'>
+                    <label class='bzp-label' for='bulkUpdateNotesCheckbox' style='margin:0; cursor:pointer; font-weight:600;'>Update Notes</label>
+                  </div>
+                  <div x-show='bulkEditingTenants.updateNotes' style='margin-top:0.5rem; padding-left:1.5rem;'>
+                    <textarea id='bulkNotes' x-model='bulkEditingTenants.notes' class='bzp-textarea' rows='3' placeholder='Bulk notes...'></textarea>
+                  </div>
+                </div>
+
+                <div style='display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid var(--bzp-border); padding-top:1.25rem;'>
+                  <button type='button' @click='closeBulkEditModal()' class='bzp-btn bzp-btn-ghost'>Cancel</button>
+                  <button type='submit' class='bzp-btn bzp-btn-primary'>Apply Bulk Changes</button>
+                </div>
+              </form>
+            </div>
+          </template>
+        </div>
       </div>
 
       <!-- RESOURCES tab -->
@@ -148,7 +308,7 @@
                   <div style='font-size:0.85rem; color:var(--bzp-ink-faint);' x-text='d.used + " / " + d.total'></div>
                 </div>
                 <div style='height:4px; background:var(--bzp-border-faint); border-radius:2px; margin-top:0.5rem; overflow:hidden;'>
-                  <div :style="`width: ${d.percent}%; background: ${d.percent > 90 ? "var(--bzp-danger)" : "var(--bzp-accent)"}; height:100%;`"></div >
+                  <div :style='`width: ${d.percent}%; background: ${d.percent > 90 ? "var(--bzp-danger)" : "var(--bzp-accent)"}; height:100%;`'></div>
                 </div>
               </div>
             </template>
@@ -169,7 +329,7 @@
                 </div>
                 <div style='font-size:0.7rem; color:var(--bzp-ink-faint); margin-bottom:0.4rem;' x-text='g.used + " / " + g.total'></div>
                 <div style='height:3px; background:var(--bzp-border-faint); margin-bottom:0.8rem;'>
-                  <div :style="`width: ${g.util}%; background: ${g.util > 80 ? "var(--bzp-danger)" : "var(--bzp-success)"}; height:100%;`"></div >
+                  <div :style='`width: ${g.util}%; background: ${g.util > 80 ? "var(--bzp-danger)" : "var(--bzp-success)"}; height:100%;`'></div>
                 </div>
                 
                 <div x-show='g.processes?.length'>

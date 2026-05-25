@@ -21,6 +21,7 @@ import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
+from bizpulse.config import settings
 from bizpulse.api.dependencies import get_store
 from bizpulse.api.usage import daily_limit
 from bizpulse.models import Tenant
@@ -94,6 +95,7 @@ class TenantWithUsage(BaseModel):
     daily_limit_override: int | None
     suspended: bool
     notes: str | None
+    is_test: bool
     runs_today: int
     runs_total: int
     effective_daily_limit: int
@@ -106,6 +108,24 @@ class UpdateTenantRequest(BaseModel):
     clear_daily_limit_override: bool = Field(default=False)
     suspended: bool | None = None
     notes: str | None = Field(default=None, max_length=2000)
+    is_test: bool | None = None
+
+
+class BulkDeleteRequest(BaseModel):
+    tenant_ids: list[UUID]
+
+
+class BulkUpdateTenantsRequest(BaseModel):
+    tenant_ids: list[UUID]
+    update_limit: bool = Field(default=False)
+    daily_limit_override: int | None = Field(default=None, ge=0, le=10_000)
+    clear_daily_limit_override: bool = Field(default=False)
+    update_suspended: bool = Field(default=False)
+    suspended: bool | None = None
+    update_notes: bool = Field(default=False)
+    notes: str | None = Field(default=None, max_length=2000)
+    update_is_test: bool = Field(default=False)
+    is_test: bool | None = None
 
 
 class ImpersonateResponse(BaseModel):
@@ -144,10 +164,10 @@ async def admin_proxy(
 ) -> Response:
     """Proxy health checks to internal services."""
     urls = {
-        "qdrant": os.environ.get("QDRANT_URL", "http://127.0.0.1:6333").rstrip("/"),
-        "vllm": os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8800/v1").replace("/v1", ""),
-        "tei-embed": os.environ.get("EMBED_BASE_URL", "http://127.0.0.1:8081"),
-        "tei-rerank": os.environ.get("RERANK_BASE_URL", "http://127.0.0.1:8082"),
+        "qdrant": settings.qdrant_url.rstrip("/"),
+        "vllm": settings.llm_base_url.replace("/v1", ""),
+        "tei-embed": settings.embed_base_url,
+        "tei-rerank": settings.rerank_base_url,
     }
     if service not in urls:
         raise HTTPException(status_code=404, detail=f"Unknown service: {service}")
@@ -349,6 +369,7 @@ def _to_tenant_with_usage(t: Tenant, store: Store) -> TenantWithUsage:
         daily_limit_override=t.daily_limit_override,
         suspended=t.suspended,
         notes=t.notes,
+        is_test=t.is_test,
         runs_today=runs_today,
         runs_total=runs_total,
         effective_daily_limit=effective_limit,
@@ -362,6 +383,71 @@ def list_tenants(
     store: Store = Depends(get_store),
 ) -> list[TenantWithUsage]:
     return [_to_tenant_with_usage(t, store) for t in store.list_tenants()]
+
+
+@router.patch("/tenants/bulk-patch", response_model=list[TenantWithUsage])
+def bulk_patch_tenants(
+    body: BulkUpdateTenantsRequest,
+    request: Request,
+    _: None = Depends(require_admin),
+    store: Store = Depends(get_store),
+) -> list[TenantWithUsage]:
+    from bizpulse.api.audit import record_audit
+
+    updated_tenants = []
+    audit_details = []
+
+    for tid in body.tenant_ids:
+        before = store.get_tenant(tid)
+        if before is None:
+            continue
+
+        kwargs: dict[str, Any] = {}
+        if body.update_limit:
+            kwargs["clear_daily_limit_override"] = body.clear_daily_limit_override
+            if not body.clear_daily_limit_override:
+                kwargs["daily_limit_override"] = body.daily_limit_override
+        if body.update_suspended:
+            kwargs["suspended"] = body.suspended
+        if body.update_notes:
+            kwargs["notes"] = body.notes
+        if body.update_is_test:
+            kwargs["is_test"] = body.is_test
+
+        if not kwargs:
+            updated_tenants.append(_to_tenant_with_usage(before, store))
+            continue
+
+        updated = store.update_tenant(tid, **kwargs)
+        if updated is not None:
+            updated_tenants.append(_to_tenant_with_usage(updated, store))
+            diff: dict[str, Any] = {}
+            if body.update_limit:
+                new_val = None if body.clear_daily_limit_override else body.daily_limit_override
+                if before.daily_limit_override != new_val:
+                    diff["daily_limit_override"] = {"before": before.daily_limit_override, "after": new_val}
+            if body.update_suspended and before.suspended != body.suspended:
+                diff["suspended"] = {"before": before.suspended, "after": body.suspended}
+            if body.update_notes and before.notes != body.notes:
+                diff["notes"] = {"before": before.notes, "after": body.notes}
+            if body.update_is_test and before.is_test != body.is_test:
+                diff["is_test"] = {"before": before.is_test, "after": body.is_test}
+            
+            if diff:
+                audit_details.append({"id": str(tid), "name": before.name, "diff": diff})
+
+    if audit_details:
+        record_audit(
+            store=store,
+            actor="admin",
+            action="tenant.bulk_update",
+            target_kind="tenant",
+            target_id="bulk",
+            details={"updated": audit_details},
+            request_ip=request.client.host if request.client else None,
+        )
+
+    return updated_tenants
 
 
 @router.patch("/tenants/{tenant_id}", response_model=TenantWithUsage)
@@ -382,12 +468,13 @@ def update_tenant(
         clear_daily_limit_override=body.clear_daily_limit_override,
         suspended=body.suspended,
         notes=body.notes,
+        is_test=body.is_test,
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="not found")
     if before is not None:
         diff: dict[str, object] = {}
-        for field in ("name", "daily_limit_override", "suspended", "notes"):
+        for field in ("name", "daily_limit_override", "suspended", "notes", "is_test"):
             old_v = getattr(before, field)
             new_v = getattr(updated, field)
             if old_v != new_v:
@@ -403,6 +490,63 @@ def update_tenant(
                 request_ip=request.client.host if request.client else None,
             )
     return _to_tenant_with_usage(updated, store)
+
+
+@router.delete("/tenants/{tenant_id}", status_code=status.HTTP_200_OK)
+def delete_tenant(
+    tenant_id: UUID,
+    request: Request,
+    _: None = Depends(require_admin),
+    store: Store = Depends(get_store),
+) -> dict:
+    from bizpulse.api.audit import record_audit
+
+    before = store.get_tenant(tenant_id)
+    if before is None:
+        raise HTTPException(status_code=404, detail="not found")
+    
+    success = store.delete_tenant(tenant_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="failed to delete tenant")
+
+    record_audit(
+        store=store,
+        actor="admin",
+        action="tenant.delete",
+        target_kind="tenant",
+        target_id=str(tenant_id),
+        details={"name": before.name, "slug": before.slug},
+        request_ip=request.client.host if request.client else None,
+    )
+    return {"status": "success", "detail": f"Tenant {tenant_id} deleted"}
+
+
+@router.post("/tenants/bulk-delete", status_code=status.HTTP_200_OK)
+def bulk_delete_tenants(
+    body: BulkDeleteRequest,
+    request: Request,
+    _: None = Depends(require_admin),
+    store: Store = Depends(get_store),
+) -> dict:
+    from bizpulse.api.audit import record_audit
+
+    deleted = []
+    for tid in body.tenant_ids:
+        before = store.get_tenant(tid)
+        if before is not None and store.delete_tenant(tid):
+            deleted.append({"id": str(tid), "name": before.name})
+
+    if deleted:
+        record_audit(
+            store=store,
+            actor="admin",
+            action="tenant.bulk_delete",
+            target_kind="tenant",
+            target_id="bulk",
+            details={"deleted": deleted},
+            request_ip=request.client.host if request.client else None,
+        )
+    return {"status": "success", "deleted_count": len(deleted), "deleted": deleted}
 
 
 @router.post("/tenants/cleanup", response_model=CleanupResponse)
