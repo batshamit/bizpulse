@@ -96,7 +96,7 @@ def test_bulk_delete_tenants_success() -> None:
         res = r_bulk.json()
         assert res["status"] == "success"
         assert res["deleted_count"] == 2
-        
+
         deleted_ids = [item["id"] for item in res["deleted"]]
         assert t1["id"] in deleted_ids
         assert t2["id"] in deleted_ids
@@ -158,10 +158,14 @@ def test_update_tenant_is_test() -> None:
         )
         assert r_audit.status_code == 200
         logs = r_audit.json()
-        
+
         # Check that there is an update audit log with details for is_test
         update_log = next(
-            (log for log in logs if log["action"] == "tenant.update" and log["target_id"] == tenant_id),
+            (
+                log
+                for log in logs
+                if log["action"] == "tenant.update" and log["target_id"] == tenant_id
+            ),
             None,
         )
         assert update_log is not None
@@ -195,7 +199,7 @@ def test_bulk_update_tenants_success() -> None:
         assert r_bulk.status_code == 200
         res = r_bulk.json()
         assert len(res) == 2
-        
+
         # Verify changes in response
         for item in res:
             assert item["daily_limit_override"] == 42
@@ -208,7 +212,7 @@ def test_bulk_update_tenants_success() -> None:
         t1_store = store.get_tenant(UUID(t1["id"]))
         t2_store = store.get_tenant(UUID(t2["id"]))
         t3_store = store.get_tenant(UUID(t3["id"]))
-        
+
         assert t1_store is not None
         assert t1_store.daily_limit_override == 42
         assert t1_store.suspended is True
@@ -234,7 +238,7 @@ def test_bulk_update_tenants_success() -> None:
         )
         assert r_audit.status_code == 200
         logs = r_audit.json()
-        
+
         bulk_update_log = next(
             (log for log in logs if log["action"] == "tenant.bulk_update"),
             None,
@@ -243,7 +247,7 @@ def test_bulk_update_tenants_success() -> None:
         assert "updated" in bulk_update_log["details"]
         updated_records = bulk_update_log["details"]["updated"]
         assert len(updated_records) == 2
-        
+
         updated_ids = [r["id"] for r in updated_records]
         assert t1["id"] in updated_ids
         assert t2["id"] in updated_ids
@@ -263,5 +267,3 @@ def test_bulk_update_tenants_unauthorized() -> None:
             },
         )
         assert r_bulk.status_code == 401
-
-

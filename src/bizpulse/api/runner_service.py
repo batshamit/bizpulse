@@ -24,9 +24,8 @@ import hashlib
 import os
 import re
 import tempfile
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any
 from uuid import UUID
 
 from qdrant_client import QdrantClient
@@ -36,6 +35,7 @@ from bizpulse.agents.graph import build_analysis_graph
 from bizpulse.config import settings
 from bizpulse.ingest import IngestionPipeline
 from bizpulse.ingest.crawler import PlaywrightCrawler
+from bizpulse.llm import LLMClient
 from bizpulse.llm.factory import ollama_chat_client
 from bizpulse.llm.openai_compat import groq_client, mistral_client, openrouter_client
 from bizpulse.logging import get_logger
@@ -120,50 +120,122 @@ def _pick_embedder():
     return fallback
 
 
+def _check_ollama_model_sync(model_name: str, base_url: str) -> bool:
+    """Synchronously check if a model exists in local Ollama tags."""
+    try:
+        import urllib.parse
+
+        import httpx
+
+        parsed = urllib.parse.urlparse(base_url)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        with httpx.Client(timeout=2.0) as client:
+            r = client.get(f"{origin}/api/tags")
+            if r.status_code == 200:
+                data = r.json()
+                models = [m["name"] for m in data.get("models", [])]
+                return model_name in models or f"{model_name}:latest" in models
+    except Exception:
+        pass
+    return False
+
+
 def _pick_council(num_llms: int | None = None) -> Council | None:
     """Build a council preferring local Ollama if available, then fallback vendors."""
-    by_vendor: dict[str, Callable[[], Any]] = {}
+    members: list[LLMClient] = []
 
-    # Try Ollama first as it's local and cost-free
-    if "11434" in settings.llm_base_url:
-        by_vendor["ollama"] = lambda: ollama_chat_client()
+    # Try local LLM (Ollama or local vLLM) first as it's local and cost-free
+    if (
+        "11434" in settings.llm_base_url
+        or "8800" in settings.llm_base_url
+        or "vllm" in settings.llm_base_url.lower()
+    ):
+        if "11434" in settings.llm_base_url:
+            # Local Ollama Council (Optimized to fit in GPU VRAM with zero CPU fallback):
+            # - gemma2:27b as primary judge (dynamic fallback to gemma2:9b)
+            # - qwen2.5:14b as specified (dynamic fallback to granite3.2:8b)
+            # - gemma2:9b as third member (dynamic fallback to granite3.2:8b)
+            primary_model = (
+                "gemma2:27b"
+                if _check_ollama_model_sync("gemma2:27b", settings.llm_base_url)
+                else "gemma2:9b"
+            )
+            qwen_model = (
+                "qwen2.5:14b"
+                if _check_ollama_model_sync("qwen2.5:14b", settings.llm_base_url)
+                else "granite3.2:8b"
+            )
+            gemma_model = (
+                "gemma2:9b"
+                if _check_ollama_model_sync("gemma2:9b", settings.llm_base_url)
+                else "granite3.2:8b"
+            )
+            members.append(ollama_chat_client(model=primary_model))
+            members.append(ollama_chat_client(model=qwen_model))
+            members.append(ollama_chat_client(model=gemma_model))
+        else:
+            members.append(ollama_chat_client())
+
+            # If local Ollama is also running on port 11434, append its models to the council as local fallbacks
+            ollama_url = "http://127.0.0.1:11434/v1"
+            for local_model in ["gemma2:27b", "qwen2.5:14b", "gemma2:9b", "granite3.2:8b"]:
+                if _check_ollama_model_sync(local_model, ollama_url):
+                    members.append(ollama_chat_client(model=local_model, base_url=ollama_url))
 
     if os.environ.get("MISTRAL_API_KEY"):
-        by_vendor["mistral"] = lambda: mistral_client(model="mistral-small-latest")
+        models_str = os.environ.get(
+            "MISTRAL_MODELS", os.environ.get("MISTRAL_MODEL", "mistral-small-latest")
+        )
+        for m in [x.strip() for x in models_str.split(",") if x.strip()]:
+            members.append(mistral_client(model=m))
+
     if os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"):
         from bizpulse.llm.gemini_client import GeminiClient
 
-        by_vendor["google"] = lambda: GeminiClient(model="gemini-2.5-flash")
+        models_str = os.environ.get(
+            "GEMINI_MODELS", os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+        )
+        for m in [x.strip() for x in models_str.split(",") if x.strip()]:
+            members.append(GeminiClient(model=m))
+
     if os.environ.get("GROQ_API_KEY"):
-        by_vendor["groq"] = lambda: groq_client(model="llama-3.3-70b-versatile")
+        models_str = os.environ.get(
+            "GROQ_MODELS", os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+        )
+        for m in [x.strip() for x in models_str.split(",") if x.strip()]:
+            members.append(groq_client(model=m))
+
     if os.environ.get("OPENROUTER_API_KEY"):
-        by_vendor["openrouter"] = lambda: openrouter_client(model="anthropic/claude-haiku-4-5")
+        models_str = os.environ.get(
+            "OPENROUTER_MODELS", os.environ.get("OPENROUTER_MODEL", "anthropic/claude-haiku-4-5")
+        )
+        for m in [x.strip() for x in models_str.split(",") if x.strip()]:
+            members.append(openrouter_client(model=m))
 
-    if not by_vendor:
-        return None
-
-    # Pick up to num_llms available vendors in preference order
-    available_vendors = ["ollama", "mistral", "google", "groq", "openrouter"]
-    selected_vendors = [v for v in available_vendors if v in by_vendor]
-
-    if num_llms is not None and num_llms > 0:
-        selected_vendors = selected_vendors[:num_llms]
-
-    members = [by_vendor[v]() for v in selected_vendors]
     if not members:
         return None
 
+    # Pick up to num_llms members
+    if num_llms is not None and num_llms > 0:
+        members = members[:num_llms]
+
     primary = members[0]
 
-    # Pick fallback judge from a different vendor if any.
-    fallback = None
-    for v in ("groq", "google", "mistral", "openrouter"):
-        if v in by_vendor and v != primary.vendor:
-            try:
-                fallback = by_vendor[v]()
+    # Pick fallback judge: prefer another local (ollama/vllm) member first, if available
+    fallback: LLMClient | None = None
+    for member in members:
+        if member.name != primary.name and (
+            "127.0.0.1" in getattr(member, "base_url", "")
+            or "localhost" in getattr(member, "base_url", "")
+        ):
+            fallback = member
+            break
+
+    if fallback is None:
+        for member in members:
+            if member.vendor != primary.vendor:
+                fallback = member
                 break
-            except Exception:
-                continue
 
     rounds = 2 if len(members) > 1 else 1
 
@@ -250,6 +322,49 @@ async def _try_crawl(url: str, tenant_id: UUID, business_id: UUID) -> list[RawAr
     return artifacts
 
 
+async def _fetch_google_search_artifacts(
+    business: Business,
+    country: str,
+    state: str | None,
+) -> list[RawArtifact]:
+    """Queries the Google Custom Search API for policy/trade, scarcity, deals,
+
+    and innovations, wrapping results as RawArtifacts.
+    """
+    from bizpulse.retrieval.web_search import GoogleSearchClient
+
+    client = GoogleSearchClient()
+    if not client.api_key or not client.cse_id:
+        return []
+
+    log.info(
+        "runner.google_search.start",
+        business_id=str(business.id),
+        industry=business.industry,
+    )
+    results = await client.gather_all_perspectives(
+        business_url=business.url,
+        industry=business.industry or "general",
+        country=country,
+        state=state,
+    )
+
+    artifacts = []
+    for r in results:
+        text = f"Title: {r['title']}\nSnippet: {r['snippet']}\nLink: {r['link']}"
+        artifacts.append(
+            RawArtifact(
+                tenant_id=business.tenant_id,
+                business_id=business.id,
+                source_url=r["link"],
+                source_type="website_page",
+                content_hash=RawArtifact.hash_text(text),
+                extracted_text=text,
+            )
+        )
+    return artifacts
+
+
 def _synthetic_artifact(business: Business) -> RawArtifact:
     """Industry-shaped placeholder when crawl fails. Keeps the demo moving."""
     industry = business.industry or "fintech"
@@ -293,6 +408,7 @@ async def run_analysis_background(
     state: str | None = None,
     additional_context: str | None = None,
     num_llms: int | None = None,
+    run_type: str = "marketing_strategy",
 ) -> None:
     """Run the analysis pipeline in the background. Updates the run record
     in `get_default_store()` as it progresses."""
@@ -310,9 +426,14 @@ async def run_analysis_background(
         _set("failed", error="No LLM API keys available — set at least one vendor key in .env.")
         return
 
-    # 1. Crawl + Additional Context.
+    # 1. Crawl + Google Web Search + Additional Context.
     _set("ingesting")
     artifacts = await _try_crawl(business.url, business.tenant_id, business.id)
+
+    # Gathers real-time national & international news/government policies
+    search_artifacts = await _fetch_google_search_artifacts(business, country, state)
+    artifacts.extend(search_artifacts)
+
     if additional_context:
         artifacts.append(_user_context_artifact(business, additional_context))
     if not artifacts:
@@ -339,9 +460,16 @@ async def run_analysis_background(
         council=council,
         industry=business.industry,
     )
-    # Sequential graph for free-tier safety — keeps us at <= 1 in-flight
-    # LLM call across the whole run.
-    graph = build_analysis_graph(runner, sequential=True)
+    # Run in parallel if we are on local Ollama, else sequential for free-tier safety
+    # (keeps us at <= 1 in-flight LLM call across the whole run for API limits).
+    is_local = "11434" in settings.llm_base_url
+    seq = not is_local
+    if run_type == "daily_research":
+        from bizpulse.agents.research_graph import build_research_graph
+
+        graph = build_research_graph(runner, sequential=seq)
+    else:
+        graph = build_analysis_graph(runner, sequential=seq)
 
     # Fetch up to 2 successful completed runs in the same industry to guide in-context learning
     few_shots = None
@@ -359,6 +487,7 @@ async def run_analysis_background(
         "country": country,
         "state": state,
         "few_shots": few_shots,
+        "run_type": run_type,
     }
     try:
         final = await _invoke_graph_with_retry(graph, initial_state)
@@ -367,22 +496,24 @@ async def run_analysis_background(
         _set("failed", error=f"graph invocation failed: {exc}")
         return
 
-    strategy = final.get("final_strategy")
+    if run_type == "daily_research":
+        strategy = final.get("research_report")
+    else:
+        strategy = final.get("final_strategy")
     compliance = final.get("compliance_report")
+
     if strategy is None:
         errors = final.get("errors", [])
-        _set("failed", error="; ".join(errors)[:500] or "no final_strategy produced")
+        _set("failed", error="; ".join(errors)[:500] or "no output produced")
         return
 
     # 4. Attach compliance + agent_traces to the strategy + persist.
     traces = final.get("agent_traces") or []
     try:
-        strategy = strategy.model_copy(
-            update={
-                "compliance_report": compliance,
-                "agent_traces": traces,
-            }
-        )
+        update_fields = {"agent_traces": traces}
+        if hasattr(strategy, "compliance_report"):
+            update_fields["compliance_report"] = compliance
+        strategy = strategy.model_copy(update=update_fields)
     except Exception as exc:
         log.warning("runner.merge_failed", error=str(exc)[:200])
 

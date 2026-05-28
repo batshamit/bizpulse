@@ -9,6 +9,7 @@ from pydantic import Field
 
 from bizpulse.models.agents import AgentTrace
 from bizpulse.models.common import BusinessId, RunId, StrictModel, TenantId, utcnow
+from bizpulse.models.research import DailyResearchReport
 from bizpulse.models.strategy import MarketingStrategy
 
 RunStatus = Literal[
@@ -40,7 +41,9 @@ class RunRecord(StrictModel):
     finished_at: datetime | None = None
     agent_traces: list[AgentTrace] = Field(default_factory=list)
     error: str | None = None
-    final_output: MarketingStrategy | None = None
+    final_output: MarketingStrategy | DailyResearchReport | None = None
+    run_type: Literal["marketing_strategy", "daily_research"] = "marketing_strategy"
+    inputs: dict | None = Field(default=None)
     total_input_tokens: int = Field(default=0, ge=0)
     total_output_tokens: int = Field(default=0, ge=0)
     total_cost_usd: float = Field(default=0.0, ge=0.0)

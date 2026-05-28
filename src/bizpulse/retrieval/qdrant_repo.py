@@ -139,7 +139,11 @@ class TenantQdrant:
         if industry is not None:
             must.append(FieldCondition(key="industry", match=MatchValue(value=industry)))
         if source_types:
-            must.append(FieldCondition(key="source_type", match=MatchAny(any=[str(s) for s in source_types])))
+            must.append(
+                FieldCondition(
+                    key="source_type", match=MatchAny(any=[str(s) for s in source_types])
+                )
+            )
 
         flt = Filter(must=must)
         # `query_points` is the modern API (replaces deprecated `search`).

@@ -117,11 +117,13 @@ def _make_analyst(
     def factory(runner: AgentRunner) -> NodeFn:
         async def node(state: AnalysisState) -> dict[str, object]:
             t0 = time.perf_counter()
+            few_shots = state.get("few_shots")
             few_shot_examples = None
-            if state.get("few_shots"):
+            if few_shots:
                 few_shot_examples = []
                 import json
-                for fs in state["few_shots"]:
+
+                for fs in few_shots:
                     sub_val = None
                     if isinstance(fs, dict):
                         sub_val = fs.get(state_key)
@@ -131,7 +133,9 @@ def _make_analyst(
                         if hasattr(sub_val, "model_dump_json"):
                             few_shot_examples.append(json.loads(sub_val.model_dump_json()))
                         elif hasattr(sub_val, "dict"):
-                            few_shot_examples.append(json.loads(json.dumps(sub_val.dict(), default=str)))
+                            few_shot_examples.append(
+                                json.loads(json.dumps(sub_val.dict(), default=str))
+                            )
                         elif isinstance(sub_val, dict):
                             few_shot_examples.append(json.loads(json.dumps(sub_val, default=str)))
                         else:
@@ -305,11 +309,13 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
     async def strategist(state: AnalysisState) -> dict[str, object]:
         prior = _summarize_prior_compact(state)
         t0 = time.perf_counter()
+        few_shots = state.get("few_shots")
         few_shot_examples = None
-        if state.get("few_shots"):
+        if few_shots:
             few_shot_examples = []
             import json
-            for fs in state["few_shots"]:
+
+            for fs in few_shots:
                 if hasattr(fs, "model_dump_json"):
                     few_shot_examples.append(json.loads(fs.model_dump_json()))
                 elif hasattr(fs, "dict"):

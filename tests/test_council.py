@@ -109,7 +109,11 @@ async def test_judge_failure_uses_fallback() -> None:
 
 @pytest.mark.asyncio
 async def test_judge_failure_no_fallback_raises() -> None:
-    a = FakeLLMClient(name="a", vendor="v", response="A")
+    a = FakeLLMClient(
+        name="a",
+        vendor="v",
+        raise_on_call=LLMError("dead", vendor="v", model="a", retryable=False),
+    )
     primary = FakeLLMClient(
         name="primary",
         vendor="v",

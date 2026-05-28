@@ -91,6 +91,25 @@ class OpenAICompatClient:
                 async with httpx.AsyncClient(timeout=self._timeout) as client:
                     r = await client.post(url, headers=headers, json=payload)
                 if r.status_code == 429 or 500 <= r.status_code < 600:
+                    err_msg = r.text.lower()
+                    if r.status_code == 429 and any(
+                        w in err_msg
+                        for w in (
+                            "quota",
+                            "billing",
+                            "exceeded",
+                            "credits",
+                            "insufficient",
+                            "tokens per day",
+                            "tpd",
+                        )
+                    ):
+                        raise LLMError(
+                            f"{self.vendor} 429 quota/credit error (non-retryable): {r.text[:300]}",
+                            vendor=self.vendor,
+                            model=self.model,
+                            retryable=False,
+                        )
                     raise _Retryable(f"{self.vendor} {r.status_code}: {r.text[:200]}")
                 if r.status_code >= 400:
                     raise LLMError(

@@ -22,6 +22,7 @@ import os
 import secrets
 from collections.abc import Iterable
 from datetime import datetime
+from typing import Literal
 from uuid import UUID, uuid4
 
 from psycopg_pool import ConnectionPool
@@ -30,6 +31,8 @@ from bizpulse.logging import get_logger
 from bizpulse.models import (
     Business,
     BusinessId,
+    DailyResearchReport,
+    MarketingStrategy,
     RunRecord,
     RunStatus,
     Tenant,
@@ -205,7 +208,13 @@ class PostgresStore:
 
     # ----- runs ----------------------------------------------------------
 
-    def create_run(self, tenant_id: TenantId, business_id: BusinessId) -> RunRecord:
+    def create_run(
+        self,
+        tenant_id: TenantId,
+        business_id: BusinessId,
+        run_type: str = "marketing_strategy",
+        inputs: dict | None = None,
+    ) -> RunRecord:
         # Verify the business belongs to this tenant before writing the run.
         biz = self.get_business(business_id)
         if biz is None:
@@ -213,17 +222,24 @@ class PostgresStore:
         if biz.tenant_id != tenant_id:
             raise ValueError("business belongs to a different tenant")
         run_id = uuid4()
+        import json
+
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO runs (id, tenant_id, business_id, status) "
-                "VALUES (%s, %s, %s, 'pending') "
+                "INSERT INTO runs (id, tenant_id, business_id, status, output) "
+                "VALUES (%s, %s, %s, 'pending', %s::jsonb) "
                 "RETURNING id, tenant_id, business_id, status, started_at, finished_at, error, output, "
                 "          total_input_tokens, total_output_tokens, total_cost_usd, llm_call_count",
-                (str(run_id), str(tenant_id), str(business_id)),
+                (str(run_id), str(tenant_id), str(business_id), json.dumps({"run_type": run_type, "inputs": inputs})),
             )
             row = cur.fetchone()
             assert row is not None
         return _row_to_run(row)
+
+    def delete_run(self, run_id: UUID) -> bool:
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM runs WHERE id = %s", (str(run_id),))
+            return cur.rowcount > 0
 
     def get_run(self, run_id: UUID) -> RunRecord | None:
         with self._pool.connection() as conn, conn.cursor() as cur:
@@ -420,6 +436,16 @@ class PostgresStore:
                 counts[table] = int(row[0]) if row else 0
         return counts
 
+    def fail_orphaned_runs(self) -> int:
+        """Find any runs that are currently in a non-terminal state and mark them as failed."""
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE runs SET status = 'failed', error = 'Run aborted due to server restart/reload', "
+                "finished_at = now() "
+                "WHERE status IN ('pending', 'ingesting', 'embedding', 'analyzing', 'synthesizing', 'critic_review')"
+            )
+            return cur.rowcount
+
 
 # ----- row mappers ---------------------------------------------------------
 
@@ -476,17 +502,25 @@ def _row_to_run(row: Iterable) -> RunRecord:
     total_output = int(cols[9]) if len(cols) > 9 and cols[9] is not None else 0
     total_cost = float(cols[10]) if len(cols) > 10 and cols[10] is not None else 0.0
     llm_calls = int(cols[11]) if len(cols) > 11 and cols[11] is not None else 0
-    final_output = None
+    final_output: MarketingStrategy | DailyResearchReport | None = None
     agent_traces = []
+    run_type: Literal["marketing_strategy", "daily_research"] = "marketing_strategy"
+    inputs = None
     if output is not None:
-        try:
-            from bizpulse.models.strategy import MarketingStrategy
+        inputs = output.get("inputs")
+        val = output.get("run_type", "marketing_strategy")
+        run_type = "daily_research" if val == "daily_research" else "marketing_strategy"
+        if len(output) > 1:
+            try:
+                if run_type == "daily_research":
+                    final_output = DailyResearchReport.model_validate(output)
+                else:
+                    final_output = MarketingStrategy.model_validate(output)
 
-            final_output = MarketingStrategy.model_validate(output)
-            if final_output and final_output.agent_traces:
-                agent_traces = final_output.agent_traces
-        except Exception:
-            final_output = None
+                if final_output and final_output.agent_traces:
+                    agent_traces = final_output.agent_traces
+            except Exception:
+                final_output = None
     return RunRecord(
         id=rid,
         tenant_id=tid,
@@ -497,6 +531,8 @@ def _row_to_run(row: Iterable) -> RunRecord:
         error=error,
         agent_traces=agent_traces,
         final_output=final_output,
+        run_type=run_type,
+        inputs=inputs,
         total_input_tokens=total_input,
         total_output_tokens=total_output,
         total_cost_usd=total_cost,

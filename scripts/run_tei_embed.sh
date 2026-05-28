@@ -6,26 +6,26 @@ set -euo pipefail
 
 ROOT="${ROOT:-/raid/amit/mylearning/bizpulse}"
 cd "$ROOT"
-. .venv/bin/activate
-# shellcheck disable=SC1091
+# Path-based virtualenv activation
+export PATH="$ROOT/.venv/bin:$PATH"
+
+# Load environment
 set -a; . .env; set +a
 
-: "${CUDA_VISIBLE_DEVICES:?Refusing to start without an explicit GPU.}"
+# Query dynamic allocation
+echo "Allocating GPU dynamically..."
+ALLOCATION=$(python3 scripts/gpu_allocator.py --service embed)
+eval "$ALLOCATION"
 
-# TEI ships a binary; we don't yet — check if installed.
-if ! command -v text-embeddings-router >/dev/null 2>&1; then
-  echo "text-embeddings-router not installed."
-  echo "Options:"
-  echo "  (a) cargo install --locked --root vendor/tei text-embeddings-router (needs Rust toolchain)"
-  echo "  (b) download a release binary from https://github.com/huggingface/text-embeddings-inference/releases"
-  echo "  (c) run via Docker once the data-root is on /raid (deferred)"
-  exit 2
-fi
+echo "Using Embedding server with $ALLOCATION"
+export CUDA_VISIBLE_DEVICES
 
 export HF_HOME="${HF_HOME:-$ROOT/.cache/huggingface}"
 export HF_HUB_ENABLE_HF_TRANSFER=1
 
-exec text-embeddings-router \
-  --model-id "${EMBED_MODEL:-BAAI/bge-large-en-v1.5}" \
+# Start the Python TEI server replica
+exec python3 scripts/tei_server.py \
+  --task embed \
   --port 8081 \
-  --hostname 127.0.0.1
+  --model-id "${EMBED_MODEL:-BAAI/bge-large-en-v1.5}" \
+  --host 127.0.0.1

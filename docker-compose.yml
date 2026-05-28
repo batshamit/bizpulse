@@ -130,7 +130,7 @@ services:
       - hf_cache_llm:/root/.cache/huggingface
     command: >-
       --model Qwen/Qwen2.5-14B-Instruct
-      --max-model-len 8192
+      --max-model-len 16384
       --gpu-memory-utilization 0.85
       --enable-auto-tool-choice
       --tool-call-parser hermes

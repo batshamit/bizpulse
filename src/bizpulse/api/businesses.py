@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
@@ -69,6 +70,9 @@ class AnalyzeRequest(BaseModel):
     num_llms: int | None = Field(
         default=None, ge=1, le=5, description="Number of LLMs to include in the Council debate."
     )
+    run_type: Literal["marketing_strategy", "daily_research"] = Field(
+        default="marketing_strategy", description="Type of analysis pipeline to run."
+    )
 
 
 @router.post(
@@ -80,8 +84,7 @@ class AnalyzeRequest(BaseModel):
         "Creates a RunRecord in `pending` state and schedules a background "
         "task that crawls + chunks + embeds + runs the multi-agent LangGraph "
         "(council debate -> compliance audit). Poll /v1/runs/{id} for status; "
-        "when status='complete', `final_output` carries the MarketingStrategy "
-        "with embedded ComplianceReport."
+        "when status='complete', `final_output` carries the output."
     ),
 )
 def analyze(
@@ -94,11 +97,22 @@ def analyze(
     biz = store.get_business(business_id)
     if biz is None or biz.tenant_id != tenant.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
-    run = store.create_run(tenant.id, business_id)
+    run_type = body.run_type if body else "marketing_strategy"
     country = body.country if body else "IN"
     state = body.state if body else None
     context = body.additional_context if body else None
     num_llms = body.num_llms if body else None
+    run = store.create_run(
+        tenant.id,
+        business_id,
+        run_type=run_type,
+        inputs={
+            "country": country,
+            "state": state,
+            "additional_context": context,
+            "num_llms": num_llms,
+        },
+    )
     bg.add_task(
         run_analysis_background,
         run_id=run.id,
@@ -107,6 +121,7 @@ def analyze(
         state=state,
         additional_context=context,
         num_llms=num_llms,
+        run_type=run_type,
     )
     return run
 

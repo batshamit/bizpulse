@@ -222,7 +222,10 @@ async def get_marketing_recommendations(
     biz = _resolve_business(tenant, business_id)
 
     runs = _store().list_runs_for_business(biz.id)
-    completed_runs = [r for r in runs if r.status == "complete" and r.final_output is not None]
+    completed_runs = [
+        r for r in runs
+        if r.status == "complete" and r.final_output is not None and r.run_type == "marketing_strategy"
+    ]
     if not completed_runs:
         return {
             "tenant_id": str(tenant.id),
@@ -234,7 +237,9 @@ async def get_marketing_recommendations(
         }
     latest_run = max(completed_runs, key=lambda r: r.finished_at or r.started_at)
     strategy = latest_run.final_output
-    assert strategy is not None
+    from bizpulse.models import MarketingStrategy
+
+    assert isinstance(strategy, MarketingStrategy)
     recs = strategy.recommendations
     if channel:
         recs = [r for r in recs if r.channel == channel]

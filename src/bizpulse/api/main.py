@@ -37,6 +37,15 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     configure(settings.log_level)
     log.info("bizpulse.api.start", version=__version__, env=settings.env)
+    try:
+        from bizpulse.storage import get_default_store
+
+        store = get_default_store()
+        count = store.fail_orphaned_runs()
+        if count > 0:
+            log.info("bizpulse.api.cleanup_orphaned_runs", count=count)
+    except Exception as exc:
+        log.warning("bizpulse.api.cleanup_orphaned_runs.failed", error=str(exc))
     yield
     log.info("bizpulse.api.stop")
 

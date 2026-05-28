@@ -286,3 +286,62 @@ def test_downloads_and_chat_endpoints() -> None:
         # Test cross-tenant access to chat
         r_chat_b = client.post(f"/v1/runs/{run_id}/chat", json=chat_req, headers=headers_b)
         assert r_chat_b.status_code == 404
+
+        # 4. Test Daily Research Report downloads and chat rejection
+        from bizpulse.models import DailyResearchReport
+
+        run_dr = store.create_run(UUID(tenant_a["id"]), UUID(biz["id"]), run_type="daily_research")
+        run_dr_id = run_dr.id
+
+        dr_report = DailyResearchReport(
+            tenant_id=UUID(tenant_a["id"]),
+            business_id=UUID(biz["id"]),
+            industry="fintech",
+            most_important_update="This is a test critical update.",
+            market_and_entities=["Launch of Product X", "Price changes in Mumbai"],
+            policy_and_news=["RBI policy changes", "Taxes updated"],
+            uncertainty_log=["Uncertain price changes"],
+            overall_confidence=0.95,
+            citations=[Citation(chunk_id=cid, quote="Test quote", confidence=0.9)],
+        )
+        store.update_run_status(run_dr_id, "complete")
+        _persist_final_output(store=store, run_id=run_dr_id, strategy=dr_report)
+
+        # Test PDF download for daily research
+        r_pdf_dr = client.get(f"/v1/runs/{run_dr_id}/pdf", headers=headers_a)
+        assert r_pdf_dr.status_code == 200
+        assert r_pdf_dr.headers["content-type"] == "application/pdf"
+        assert f"BizPulse_Report_{run_dr_id}.pdf" in r_pdf_dr.headers["content-disposition"]
+        assert len(r_pdf_dr.content) > 0
+
+        # Test Markdown download for daily research
+        r_md_dr = client.get(f"/v1/runs/{run_dr_id}/download", headers=headers_a)
+        assert r_md_dr.status_code == 200
+        assert r_md_dr.headers["content-type"] == "text/markdown; charset=utf-8"
+        assert f"BizPulse_Report_{run_dr_id}.md" in r_md_dr.headers["content-disposition"]
+        assert "# BizPulse Daily Research Report" in r_md_dr.text
+        assert "Launch of Product X" in r_md_dr.text
+        assert "RBI policy changes" in r_md_dr.text
+        assert "Uncertain price changes" in r_md_dr.text
+        assert "Source #1" in r_md_dr.text
+
+        # Test POST /v1/runs/{run_dr_id}/chat should fail with 400 for daily research
+        r_chat_dr = client.post(f"/v1/runs/{run_dr_id}/chat", json=chat_req, headers=headers_a)
+        assert r_chat_dr.status_code == 400
+        assert "only supported for marketing strategy" in r_chat_dr.json()["detail"]
+
+        # Test DELETE /v1/runs/{run_dr_id} endpoint successfully deletes the run
+        r_del = client.delete(f"/v1/runs/{run_dr_id}", headers=headers_a)
+        assert r_del.status_code == 200
+        assert r_del.json()["status"] == "success"
+
+        # Verify that it is deleted and returns 404
+        r_get = client.get(f"/v1/runs/{run_dr_id}", headers=headers_a)
+        assert r_get.status_code == 404
+
+        # Test cross-tenant deletion failure (Tenant B tries to delete a Tenant A run)
+        run_dr_2 = store.create_run(UUID(tenant_a["id"]), UUID(biz["id"]), run_type="daily_research")
+        run_dr_2_id = run_dr_2.id
+
+        r_del_b = client.delete(f"/v1/runs/{run_dr_2_id}", headers=headers_b)
+        assert r_del_b.status_code == 404

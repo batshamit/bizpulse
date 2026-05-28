@@ -8,7 +8,9 @@ from bizpulse.agents.council import (
     CouncilResult,
     ProposalRecord,
 )
+from bizpulse.agents.graph import build_analysis_graph
 from bizpulse.agents.prompts import PromptBuilder
+from bizpulse.agents.research_graph import build_research_graph
 from bizpulse.agents.runner import (
     AgentRunError,
     AgentRunner,
@@ -27,5 +29,7 @@ __all__ = [
     "CouncilResult",
     "PromptBuilder",
     "ProposalRecord",
+    "build_analysis_graph",
+    "build_research_graph",
     "extract_json",
 ]

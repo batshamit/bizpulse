@@ -24,12 +24,17 @@ def ollama_chat_client(model: str | None = None, **kw: Any) -> LLMClient:
     from bizpulse.config import settings
     from bizpulse.llm.openai_compat import OpenAICompatClient
 
+    # Set default timeout to 300.0 seconds for slow CPU inference
+    timeout = kw.pop("timeout", 300.0)
+    base_url = kw.pop("base_url", settings.llm_base_url)
+
     return OpenAICompatClient(
         vendor="ollama",
         model=model or settings.llm_model,
-        base_url=settings.llm_base_url,
+        base_url=base_url,
         api_key_env="OLLAMA_API_KEY",
         api_key="EMPTY",
+        timeout=timeout,
         **kw,
     )
 
@@ -80,7 +85,13 @@ def _try_ollama(model: str | None = None) -> LLMClient | None:
     from bizpulse.config import settings
 
     url = os.environ.get("LLM_BASE_URL", settings.llm_base_url)
-    if "11434" in url or "ollama" in url.lower() or os.environ.get("OLLAMA_API_KEY"):
+    if (
+        "11434" in url
+        or "8800" in url
+        or "ollama" in url.lower()
+        or "vllm" in url.lower()
+        or os.environ.get("OLLAMA_API_KEY")
+    ):
         return ollama_chat_client(model=model)
     return None
 

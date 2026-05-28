@@ -78,6 +78,18 @@
     </div>
 
     <div style='margin-top:1.5rem;'>
+      <label class='bzp-label' for='run_type'>Analysis Run Type</label>
+      <select id='run_type' x-model='run_type' class='bzp-select' required>
+        <option value='marketing_strategy'>Marketing Strategy (4 Analyst Council + Strategy Synthesis + Compliance Check)</option>
+        <option value='daily_research'>Daily Research Report (Gather Launches, Local Price Trends, and Regulations)</option>
+        <option value='both'>Generate Both (Runs both analysis pipelines concurrently)</option>
+      </select>
+      <div style='color:var(--bzp-ink-faint); font-size:0.8rem; margin-top:0.4rem;'>
+        Select 'Generate Both' to trigger both pipelines side-by-side.
+      </div>
+    </div>
+
+    <div style='margin-top:1.5rem;'>
       <label class='bzp-label' for='num_llms'>LLM Council Size</label>
       <select id='num_llms' x-model='num_llms' class='bzp-select'>
         <option value=''>Auto (All available LLMs)</option>

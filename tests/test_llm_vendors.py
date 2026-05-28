@@ -179,7 +179,7 @@ def test_factory_available_vendors_reflects_env(monkeypatch: pytest.MonkeyPatch)
         "OLLAMA_API_KEY",
     ):
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:8800/v1")
+    monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:9999/v1")
     assert available_vendors() == []
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
@@ -205,6 +205,6 @@ def test_factory_build_council_raises_with_no_keys(monkeypatch: pytest.MonkeyPat
         "OLLAMA_API_KEY",
     ):
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:8800/v1")
+    monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:9999/v1")
     with pytest.raises(RuntimeError, match="No LLM API keys"):
         build_council()

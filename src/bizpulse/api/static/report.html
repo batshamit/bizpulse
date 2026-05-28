@@ -50,11 +50,18 @@
           </div>
         </div>
         <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
+          <button @click="retry()" :disabled="retrying" class="bzp-btn bzp-btn-primary" x-show="run?.status === 'complete'" style="background:var(--bzp-accent); border-color:var(--bzp-accent);">
+            <span x-show="!retrying">↻ Run again</span>
+            <span x-show="retrying">Running…</span>
+          </button>
           <button @click="downloadPdf()" class="bzp-btn bzp-btn-primary" :disabled="!run?.final_output">
             📄 Download PDF
           </button>
           <button @click="downloadReport()" class="bzp-btn bzp-btn-ghost" :disabled="!run?.final_output">
             📥 Markdown
+          </button>
+          <button @click="deleteRun()" class="bzp-btn bzp-btn-ghost" style="color:var(--bzp-danger); border-color:var(--bzp-danger-soft);" :disabled="retrying">
+            🗑 Delete
           </button>
         </div>
       </div>
@@ -82,15 +89,151 @@
         </div>
       </div>
 
+      <!-- Startup Parameters / Options Chosen -->
+      <template x-if="run.inputs">
+        <div class="bzp-card" style="margin-bottom:1.5rem; padding:1.25rem;">
+          <h3 style="margin:0 0 0.8rem; font-size:1rem; font-weight:600; color:var(--bzp-ink);">📋 Launch Parameters</h3>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:1rem; font-size:0.88rem;">
+            <div x-show="run.inputs.country">
+              <strong style="color:var(--bzp-ink-soft);">Target Country:</strong>
+              <span x-text="run.inputs.country" style="color:var(--bzp-ink); font-family:monospace;"></span>
+            </div>
+            <div x-show="run.inputs.state">
+              <strong style="color:var(--bzp-ink-soft);">Target State:</strong>
+              <span x-text="run.inputs.state || 'National'" style="color:var(--bzp-ink);"></span>
+            </div>
+            <div x-show="run.inputs.num_llms">
+              <strong style="color:var(--bzp-ink-soft);">Council LLMs:</strong>
+              <span x-text="run.inputs.num_llms" style="color:var(--bzp-ink);"></span>
+            </div>
+            <div x-show="run.inputs.additional_context" style="grid-column:1 / -1;">
+              <strong style="color:var(--bzp-ink-soft); display:block; margin-bottom:0.25rem;">Additional Tenant Context:</strong>
+              <div style="background:var(--bzp-cream); border:1px solid var(--bzp-border); padding:0.6rem 0.8rem; border-radius:var(--bzp-radius); color:var(--bzp-ink-soft); font-family:var(--bzp-font-serif); line-height:1.4;" x-text="run.inputs.additional_context"></div>
+            </div>
+          </div>
+        </div>
+      </template>
+
       <!-- Tabs -->
       <div style="display:flex; gap:0.4rem; border-bottom:1px solid var(--bzp-border); margin-bottom:1.5rem;">
-        <template x-for="tab in ['strategy', 'compliance', 'agents', 'raw']" :key="tab">
+        <template x-for="tab in (run.run_type === 'daily_research' ? ['summary', 'agents', 'raw'] : ['strategy', 'compliance', 'agents', 'raw'])" :key="tab">
           <button @click="activeTab=tab"
                   :style="activeTab===tab
                     ? 'border-bottom:2px solid var(--bzp-accent); color:var(--bzp-accent); font-weight:500;'
                     : 'color:var(--bzp-ink-soft);'"
                   style="background:none; border:none; padding:0.7rem 1rem; cursor:pointer; font-size:0.95rem;"
                   x-text="tab.charAt(0).toUpperCase() + tab.slice(1)"></button>
+        </template>
+      </div>
+
+      <!-- Summary (Daily Research) tab -->
+      <div x-show="activeTab === 'summary'">
+        <template x-if="!run.final_output">
+          <div class="bzp-card bzp-empty">
+            <template x-if="run.status === 'failed'">
+              <div>
+                <div style="font-size:1.1rem; color:var(--bzp-danger); margin-bottom:0.6rem;">
+                  Analysis failed
+                </div>
+                <div x-show="run.error" x-text="run.error" style="font-size:0.85rem; color:var(--bzp-ink-soft); background:var(--bzp-danger-soft); padding:0.8rem; border-radius:var(--bzp-radius); margin-bottom:1rem; text-align:left; font-family:monospace; word-break:break-word;"></div>
+                <div style="display:flex; gap:0.6rem; justify-content:center;">
+                  <button @click="retry()" :disabled="retrying" class="bzp-btn bzp-btn-primary">
+                    <span x-show="!retrying">↻ Retry analysis</span>
+                    <span x-show="retrying">Retrying…</span>
+                  </button>
+                  <a href="/ui/new-report.html" class="bzp-btn bzp-btn-ghost">New report</a>
+                </div>
+              </div>
+            </template>
+            <template x-if="run.status !== 'failed'">
+              <div style="text-align: center; padding: 2rem 1rem; width: 100%;">
+                <div style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--bzp-ink-dark);" x-text="progressState().stage"></div>
+                <div style="font-size: 0.9rem; color: var(--bzp-ink-soft); margin-bottom: 1.5rem;" x-text="progressState().time_left"></div>
+                
+                <!-- Progress Bar container -->
+                <div style="width: 100%; max-width: 500px; height: 10px; background: var(--bzp-border); border-radius: 10px; margin: 0 auto 2rem; overflow: hidden; position: relative; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);">
+                  <div :style="`width: ${progressState().percent}%`" style="height: 100%; background: linear-gradient(90deg, var(--bzp-accent), #e28e6c); border-radius: 10px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 8px var(--bzp-accent);"></div>
+                </div>
+
+                <div style="font-size: 0.85rem; color: var(--bzp-ink-faint); margin-bottom: 1rem;">
+                  Running pipeline for <strong x-text="run.run_type === 'daily_research' ? 'Daily Research' : 'Marketing Strategy'"></strong>...
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <template x-if="run.final_output">
+          <div class="bzp-card" style="border-top: 4px solid var(--bzp-accent);">
+            <!-- High Profile Header -->
+            <div style="background:var(--bzp-accent-soft); border-left:4px solid var(--bzp-accent); padding:1.2rem; border-radius:var(--bzp-radius); margin-bottom:1.8rem;">
+              <span style="text-transform:uppercase; font-size:0.75rem; font-weight:600; color:var(--bzp-accent); display:block; margin-bottom:0.4rem; letter-spacing:0.05em;">Most Critical Update</span>
+              <h2 style="margin:0; font-size:1.25rem; font-family:'Source Serif 4',serif; color:var(--bzp-accent-dark); line-height:1.45;" x-text="run.final_output.most_important_update"></h2>
+            </div>
+
+            <!-- Two Column Layout for Market vs Policy -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-bottom:1.8rem;">
+              <!-- Market & Entities -->
+              <div style="background:white; border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:1.25rem;">
+                <h3 style="margin-top:0; display:flex; align-items:center; gap:0.5rem; font-size:1.05rem;">
+                  📊 Market & Key local updates
+                </h3>
+                <ul style="padding-left:1.2rem; margin:0.8rem 0; line-height:1.6; color:var(--bzp-ink-soft); font-size:0.92rem;">
+                  <template x-for="item in run.final_output.market_and_entities" :key="item">
+                    <li style="margin-bottom:0.6rem;" x-text="item"></li>
+                  </template>
+                  <template x-if="!run.final_output.market_and_entities || run.final_output.market_and_entities.length === 0">
+                    <li style="color:var(--bzp-ink-faint); font-style:italic;">No market updates reported.</li>
+                  </template>
+                </ul>
+              </div>
+
+              <!-- Policy & Regulations -->
+              <div style="background:white; border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:1.25rem;">
+                <h3 style="margin-top:0; display:flex; align-items:center; gap:0.5rem; font-size:1.05rem;">
+                  ⚖️ Policy & Regulations
+                </h3>
+                <ul style="padding-left:1.2rem; margin:0.8rem 0; line-height:1.6; color:var(--bzp-ink-soft); font-size:0.92rem;">
+                  <template x-for="item in run.final_output.policy_and_news" :key="item">
+                    <li style="margin-bottom:0.6rem;" x-text="item"></li>
+                  </template>
+                  <template x-if="!run.final_output.policy_and_news || run.final_output.policy_and_news.length === 0">
+                    <li style="color:var(--bzp-ink-faint); font-style:italic;">No regulatory updates reported.</li>
+                  </template>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Groundedness & Uncertainty Log -->
+            <div style="background:var(--bzp-warning-soft); border:1px solid var(--bzp-warning); border-radius:var(--bzp-radius); padding:1.2rem; margin-bottom:1.5rem;">
+              <h4 style="margin:0 0 0.5rem 0; color:var(--bzp-warning); font-size:0.95rem; display:flex; align-items:center; gap:0.4rem;">
+                ⚠️ Groundedness & Uncertainty Audit
+              </h4>
+              <p style="font-size:0.85rem; color:var(--bzp-ink-soft); margin:0 0 0.8rem 0; line-height:1.4;">
+                To prevent hallucination, the Daily Research Agent registers missing, unverified, or ambiguous facts here rather than fabricating them as certain truths.
+              </p>
+              <ul style="padding-left:1.2rem; margin:0; line-height:1.5; color:var(--bzp-ink-soft); font-size:0.88rem;">
+                <template x-for="claim in run.final_output.uncertainty_log" :key="claim">
+                  <li style="margin-bottom:0.4rem;" x-text="claim"></li>
+                </template>
+                <template x-if="!run.final_output.uncertainty_log || run.final_output.uncertainty_log.length === 0">
+                  <li style="color:var(--bzp-success); font-style:italic; list-style-type:none;">✓ All reported facts fully grounded and verified.</li>
+                </template>
+              </ul>
+            </div>
+
+            <!-- Quality Metric -->
+            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bzp-cream); padding:0.8rem 1.2rem; border-radius:var(--bzp-radius); font-size:0.9rem;">
+              <span style="color:var(--bzp-ink-soft);">Report Confidence Score:</span>
+              <div style="display:flex; align-items:center; gap:0.5rem;">
+                <div class="bzp-llll-bar" style="width:120px; margin:0; height:8px; display:inline-block; vertical-align:middle; background:var(--bzp-border);">
+                  <span :style="`width: ${(run.final_output.overall_confidence || 0)*100}%; background: var(--bzp-success);`" style="height:100%; display:block; border-radius:4px;"></span>
+                </div>
+                <strong x-text="((run.final_output.overall_confidence || 0)*100).toFixed(0) + '%'" style="color:var(--bzp-success);"></strong>
+              </div>
+            </div>
+
+          </div>
         </template>
       </div>
 
@@ -114,10 +257,18 @@
               </div>
             </template>
             <template x-if="run.status !== 'failed'">
-              <div>
-                <div style="font-size:1.05rem; margin-bottom:0.5rem;">Strategy not yet available</div>
-                <div>This run is in <strong x-text="run.status"></strong>. The Council of LLMs is still processing — refresh in a moment.</div>
-                <button @click="init()" class="bzp-btn bzp-btn-ghost" style="margin-top:1rem;">Refresh</button>
+              <div style="text-align: center; padding: 2rem 1rem; width: 100%;">
+                <div style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--bzp-ink-dark);" x-text="progressState().stage"></div>
+                <div style="font-size: 0.9rem; color: var(--bzp-ink-soft); margin-bottom: 1.5rem;" x-text="progressState().time_left"></div>
+                
+                <!-- Progress Bar container -->
+                <div style="width: 100%; max-width: 500px; height: 10px; background: var(--bzp-border); border-radius: 10px; margin: 0 auto 2rem; overflow: hidden; position: relative; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);">
+                  <div :style="`width: ${progressState().percent}%`" style="height: 100%; background: linear-gradient(90deg, var(--bzp-accent), #e28e6c); border-radius: 10px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 8px var(--bzp-accent);"></div>
+                </div>
+
+                <div style="font-size: 0.85rem; color: var(--bzp-ink-faint); margin-bottom: 1rem;">
+                  Running pipeline for <strong x-text="run.run_type === 'daily_research' ? 'Daily Research' : 'Marketing Strategy'"></strong>...
+                </div>
               </div>
             </template>
           </div>

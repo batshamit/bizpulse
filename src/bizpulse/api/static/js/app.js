@@ -114,6 +114,8 @@ document.addEventListener('alpine:init', () => {
 
   Alpine.data('dashboardPage', () => ({
     tenant: null, businesses: [], runs: [], usage: null, busy: true,
+    searchQuery: '', filterType: 'all', filterStatus: 'all',
+    selectedRun: null, showDrawer: false, drawerBusy: false, drawerError: '',
     async init() {
       if (!bzpRequireLogin()) return;
       this.tenant = bzpTenant();
@@ -121,17 +123,87 @@ document.addEventListener('alpine:init', () => {
         const [businesses, usage] = await Promise.all([bzpFetch('/v1/businesses'), bzpFetch('/v1/tenants/me/usage').catch(() => null)]);
         this.businesses = businesses; this.usage = usage;
         const runLists = await Promise.all(this.businesses.map(b => bzpFetch('/v1/businesses/' + b.id + '/runs')));
-        this.runs = runLists.flat().sort((a,b)=> b.started_at.localeCompare(a.started_at)).slice(0, 10);
+        // Load recent 30 runs to make sure we have a solid chronological dashboard view
+        this.runs = runLists.flat().sort((a,b)=> b.started_at.localeCompare(a.started_at)).slice(0, 30);
       } catch (e) { bzpToast(e.message); } finally { this.busy = false; }
     },
-    statusPill: bzpStatusPill, fmtTime: bzpFmtTime,
+    statusPill: bzpStatusPill, fmtTime: bzpFmtTime, fmtCurrency: bzpFmtCurrency,
     bizName(id) { const b = this.businesses.find(b => b.id === id); return b ? b.url : id.slice(0, 8) + '…'; },
     quotaPercent() { if (!this.usage || !this.usage.daily_limit) return 0; return Math.min(100, Math.round((this.usage.runs_today / this.usage.daily_limit) * 100)); },
     quotaTone() { const pct = this.quotaPercent(); if (pct >= 100) return 'danger'; if (pct >= 80) return 'warning'; return 'success'; },
+    activeRunsCount() {
+      return this.runs.filter(r => !['complete', 'failed'].includes(r.status)).length;
+    },
+    async openQuickView(runId) {
+      this.selectedRun = null;
+      this.showDrawer = true;
+      this.drawerBusy = true;
+      this.drawerError = '';
+      try {
+        this.selectedRun = await bzpFetch('/v1/runs/' + runId);
+      } catch (e) {
+        this.drawerError = e.message;
+      } finally {
+        this.drawerBusy = false;
+      }
+    },
+    closeQuickView() {
+      this.showDrawer = false;
+      this.selectedRun = null;
+    },
+    async deleteRunInDrawer(runId) {
+      if (!confirm("Are you sure you want to permanently delete this analysis run and all its report artifacts?")) return;
+      try {
+        await bzpFetch('/v1/runs/' + runId, { method: 'DELETE' });
+        bzpToast("Analysis run deleted successfully.");
+        this.closeQuickView();
+        this.runs = this.runs.filter(r => r.id !== runId);
+      } catch (e) {
+        bzpToast("Error deleting run: " + e.message);
+      }
+    },
+    filteredGroupedRuns() {
+      const q = this.searchQuery.toLowerCase().trim();
+      const type = this.filterType;
+      const status = this.filterStatus;
+      
+      const filtered = this.runs.filter(r => {
+        // Search query filter (by business URL)
+        const bizUrl = this.bizName(r.business_id).toLowerCase();
+        if (q && !bizUrl.includes(q)) return false;
+        
+        // Run type filter
+        if (type !== 'all' && r.run_type !== type) return false;
+        
+        // Status filter
+        if (status !== 'all') {
+          if (status === 'running') {
+            if (['complete', 'failed'].includes(r.status)) return false;
+          } else {
+            if (r.status !== status) return false;
+          }
+        }
+        return true;
+      });
+      
+      // Group by date
+      const groups = {};
+      filtered.forEach(r => {
+        const dateStr = new Date(r.started_at).toLocaleDateString(undefined, {
+          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+        });
+        if (!groups[dateStr]) {
+          groups[dateStr] = [];
+        }
+        groups[dateStr].push(r);
+      });
+      return Object.entries(groups).map(([date, items]) => ({ date, items }));
+    }
   }));
 
   Alpine.data('newReportPage', () => ({
     url: '', industry: '', country: 'IN', state: '', context: '', num_llms: '',
+    run_type: 'marketing_strategy',
     busy: false, error: '',
     INDUSTRIES: [], COUNTRIES: [], STATES: {},
     async init() {
@@ -156,12 +228,29 @@ document.addEventListener('alpine:init', () => {
         if (this.num_llms) {
           bodyPayload.num_llms = parseInt(this.num_llms, 10);
         }
-        const run = await bzpFetch('/v1/businesses/' + biz.id + '/analyze', {
-          method: 'POST',
-          body: JSON.stringify(bodyPayload)
-        });
-        bzpToast('Analysis started — opening report');
-        setTimeout(() => { window.location.href = '/ui/report.html?run=' + run.id; }, 600);
+        
+        if (this.run_type === 'both') {
+          // Fire both runs concurrently
+          const [run1, run2] = await Promise.all([
+            bzpFetch('/v1/businesses/' + biz.id + '/analyze', {
+              method: 'POST',
+              body: JSON.stringify(Object.assign({}, bodyPayload, { run_type: 'marketing_strategy' }))
+            }),
+            bzpFetch('/v1/businesses/' + biz.id + '/analyze', {
+              method: 'POST',
+              body: JSON.stringify(Object.assign({}, bodyPayload, { run_type: 'daily_research' }))
+            })
+          ]);
+          bzpToast('Generating both reports concurrently — redirecting to dashboard');
+          setTimeout(() => { window.location.href = '/ui/dashboard.html'; }, 800);
+        } else {
+          const run = await bzpFetch('/v1/businesses/' + biz.id + '/analyze', {
+            method: 'POST',
+            body: JSON.stringify(Object.assign({}, bodyPayload, { run_type: this.run_type }))
+          });
+          bzpToast('Analysis started — opening report');
+          setTimeout(() => { window.location.href = '/ui/report.html?run=' + run.id; }, 600);
+        }
       } catch (e) { this.error = e.message; } finally { this.busy = false; }
     },
   }));
@@ -566,6 +655,7 @@ document.addEventListener('alpine:init', () => {
 
   Alpine.data('reportPage', () => ({
     runId: '', run: null, business: null, busy: true, error: '', activeTab: 'strategy', retrying: false,
+    pollInterval: null, timerInterval: null, now: new Date(),
     agentTraces() {
       const fromRun = this.run?.agent_traces || [];
       const fromStrategy = this.run?.final_output?.agent_traces || [];
@@ -576,6 +666,55 @@ document.addEventListener('alpine:init', () => {
       }
       return out;
     },
+    progressState() {
+      if (!this.run) return { percent: 0, time_left: '', stage: 'Initializing' };
+      if (this.run.status === 'complete') return { percent: 100, time_left: '0s', stage: 'Complete' };
+      if (this.run.status === 'failed') return { percent: 100, time_left: '0s', stage: 'Failed' };
+
+      const started = new Date(this.run.started_at);
+      const elapsed = Math.max(0, (this.now - started) / 1000);
+
+      const runType = this.run.run_type || 'marketing_strategy';
+      const expectedDuration = runType === 'daily_research' ? 45 : 75;
+
+      const timeLeft = Math.max(1, Math.round(expectedDuration - elapsed));
+      
+      let basePercent = 5;
+      let stageText = 'Initializing pipeline';
+      
+      if (this.run.status === 'ingesting') {
+        basePercent = 15;
+        stageText = 'Crawling and extracting site content';
+      } else if (this.run.status === 'embedding') {
+        basePercent = 35;
+        stageText = 'Generating embeddings and storing vectors';
+      } else if (this.run.status === 'analyzing') {
+        basePercent = 55;
+        stageText = 'Executing sub-agent analysis';
+        
+        const completedTracesCount = this.agentTraces().filter(t => t.status === 'ok').length;
+        const totalExpectedTraces = runType === 'daily_research' ? 3 : 7;
+        const traceWeight = 30 / totalExpectedTraces;
+        basePercent += Math.min(30, Math.round(completedTracesCount * traceWeight));
+      } else if (['synthesizing', 'critic_review'].includes(this.run.status)) {
+        basePercent = 85;
+        stageText = 'Synthesizing report & reviewing compliance';
+      }
+      
+      const timePercent = Math.min(95, Math.round((elapsed / expectedDuration) * 100));
+      const percent = Math.max(basePercent, Math.min(95, timePercent));
+
+      let displayTimeLeft = `~${timeLeft}s remaining`;
+      if (timeLeft <= 5) {
+        displayTimeLeft = 'Finishing up report...';
+      }
+
+      return {
+        percent: percent,
+        time_left: displayTimeLeft,
+        stage: stageText
+      };
+    },
     async init() {
       if (!bzpRequireLogin()) return;
       const params = new URLSearchParams(window.location.search); this.runId = params.get('run') || '';
@@ -583,14 +722,45 @@ document.addEventListener('alpine:init', () => {
       try {
         this.run = await bzpFetch('/v1/runs/' + this.runId);
         if (this.run.business_id) this.business = await bzpFetch('/v1/businesses/' + this.run.business_id);
+        if (this.run && this.run.run_type === 'daily_research') {
+          this.activeTab = 'summary';
+        }
+        
+        // Start smooth timer ticker
+        this.now = new Date();
+        this.timerInterval = setInterval(() => {
+          this.now = new Date();
+        }, 500);
+
+        // Poll for updates if run is running (not complete or failed)
+        if (this.run && !['complete', 'failed'].includes(this.run.status)) {
+          this.pollInterval = setInterval(async () => {
+            try {
+              const updated = await bzpFetch('/v1/runs/' + this.runId);
+              this.run = updated;
+              if (['complete', 'failed'].includes(updated.status)) {
+                clearInterval(this.pollInterval);
+                if (this.timerInterval) clearInterval(this.timerInterval);
+              }
+            } catch (e) {
+              console.error("polling error:", e);
+            }
+          }, 3000);
+        }
       } catch (e) { this.error = e.message; } finally { this.busy = false; }
     },
     async retry() {
+      if (this.pollInterval) clearInterval(this.pollInterval);
+      if (this.timerInterval) clearInterval(this.timerInterval);
       if (!this.run?.business_id) return; this.retrying = true;
       try {
         const newRun = await bzpFetch('/v1/businesses/' + this.run.business_id + '/analyze', {
           method: 'POST',
-          body: JSON.stringify({ country: 'IN', state: null })
+          body: JSON.stringify({
+            country: 'IN',
+            state: null,
+            run_type: this.run.run_type || 'marketing_strategy'
+          })
         });
         window.location.href = '/ui/report.html?run=' + newRun.id;
       } catch (e) { bzpToast(e.message); this.retrying = false; }
@@ -620,6 +790,16 @@ document.addEventListener('alpine:init', () => {
         a.download = `BizPulse_Report_${this.runId.slice(0,8)}.pdf`;
         a.click();
       } catch (e) { bzpToast(e.message); }
+    },
+    async deleteRun() {
+      if (!confirm("Are you sure you want to permanently delete this analysis run and all its report artifacts?")) return;
+      try {
+        await bzpFetch('/v1/runs/' + this.runId, { method: 'DELETE' });
+        bzpToast("Analysis run deleted successfully.");
+        window.location.href = '/ui/dashboard.html';
+      } catch (e) {
+        bzpToast("Error deleting run: " + e.message);
+      }
     },
     statusPill: bzpStatusPill, fmtTime: bzpFmtTime, fmtCurrency: bzpFmtCurrency,
   }));

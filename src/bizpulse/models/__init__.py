@@ -41,6 +41,7 @@ from bizpulse.models.ingest import (
     RawArtifact,
     SourceType,
 )
+from bizpulse.models.research import DailyResearchReport, PolicyTrackerOutput, ProjectTrackerOutput
 from bizpulse.models.retrieval import (
     RetrievalMethod,
     RetrievalQuery,
@@ -84,11 +85,14 @@ __all__ = [
     "Competitor",
     "ContentAudit",
     "ContentAuditFinding",
+    "DailyResearchReport",
     "EmbeddedChunk",
     "IndustryOntology",
     "IndustryPack",
     "MarketingStrategy",
+    "PolicyTrackerOutput",
     "Priority",
+    "ProjectTrackerOutput",
     "RawArtifact",
     "Recommendation",
     "RetrievalMethod",

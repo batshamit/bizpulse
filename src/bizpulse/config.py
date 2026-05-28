@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
     tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
     brave_search_api_key: str | None = Field(default=None, alias="BRAVE_SEARCH_API_KEY")
+    google_api_key: str | None = Field(default=None, alias="GOOGLE_API_KEY")
+    google_cse_id: str | None = Field(default=None, alias="GOOGLE_CSE_ID")
 
     @property
     def postgres_dsn(self) -> str:

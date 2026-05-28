@@ -7,23 +7,38 @@ set -euo pipefail
 
 ROOT="${ROOT:-/raid/amit/mylearning/bizpulse}"
 cd "$ROOT"
-. .venv/bin/activate
-# shellcheck disable=SC1091
+# Path-based virtualenv activation
+export PATH="$ROOT/.venv/bin:$PATH"
+
+# Load environment
 set -a; . .env; set +a
 
-: "${CUDA_VISIBLE_DEVICES:?Refusing to start without an explicit GPU. e.g. CUDA_VISIBLE_DEVICES=4 bash scripts/run_vllm.sh}"
+# Query dynamic allocation
+echo "Allocating GPUs dynamically..."
+ALLOCATION=$(python3 scripts/gpu_allocator.py --service vllm)
+eval "$ALLOCATION"
+
+echo "Using vLLM with $ALLOCATION"
+export CUDA_VISIBLE_DEVICES
+export TENSOR_PARALLEL_SIZE
 
 mkdir -p logs
 export HF_HOME="${HF_HOME:-$ROOT/.cache/huggingface}"
 export HF_HUB_ENABLE_HF_TRANSFER=1
 
+VLLM_MODEL="Qwen/Qwen2.5-14B-Instruct"
+if [[ "${LLM_MODEL:-}" != *":"* && -n "${LLM_MODEL:-}" ]]; then
+  VLLM_MODEL="$LLM_MODEL"
+fi
+
 # vllm is OpenAI-compatible. We use port 8800 because :8000 is taken by another tenant.
-exec python -m vllm.entrypoints.openai.api_server \
-  --model "${LLM_MODEL:-Qwen/Qwen2.5-14B-Instruct}" \
+exec python3 scripts/run_vllm_patched.py \
+  --model "$VLLM_MODEL" \
   --host 127.0.0.1 \
   --port 8800 \
-  --max-model-len 8192 \
-  --gpu-memory-utilization 0.85 \
+  --max-model-len 16384 \
+  --gpu-memory-utilization "${GPU_MEMORY_UTILIZATION:-0.85}" \
   --enable-auto-tool-choice \
   --tool-call-parser hermes \
-  --dtype float16
+  --dtype float16 \
+  --tensor-parallel-size "$TENSOR_PARALLEL_SIZE"

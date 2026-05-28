@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import tempfile
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -42,12 +43,16 @@ def get_run(
 
 
 class BizPulsePDF(FPDF):
-    def header(self):
+    def __init__(self, *args: Any, title: str = "BizPulse Marketing Strategy Report", **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.report_title = title
+
+    def header(self) -> None:
         self.set_font("helvetica", "B", 16)
         self.cell(
             0,
             10,
-            "BizPulse Marketing Strategy Report",
+            self.report_title,
             border=0,
             new_x="LMARGIN",
             new_y="NEXT",
@@ -57,7 +62,7 @@ class BizPulsePDF(FPDF):
         self.line(10, 20, 200, 20)
         self.ln(10)
 
-    def footer(self):
+    def footer(self) -> None:
         self.set_y(-15)
         self.set_font("helvetica", "I", 8)
         self.cell(0, 10, f"Page {self.page_no()} | Confidential Business Intelligence", align="C")
@@ -75,7 +80,111 @@ def download_pdf(
     if run.final_output is None:
         raise HTTPException(status_code=400, detail="run has no final strategy to download")
 
+    if run.run_type == "daily_research":
+        from bizpulse.models import DailyResearchReport
+        s = run.final_output
+        assert isinstance(s, DailyResearchReport)
+
+        pdf = BizPulsePDF(title="BizPulse Daily Research Report")
+        pdf.add_page()
+
+        # Metadata
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(40, 7, "Business URL:")
+        pdf.set_font("helvetica", "", 10)
+        pdf.cell(0, 7, str(run.business_id), new_x="LMARGIN", new_y="NEXT")
+
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(40, 7, "Industry:")
+        pdf.set_font("helvetica", "", 10)
+        pdf.cell(0, 7, s.industry, new_x="LMARGIN", new_y="NEXT")
+
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(40, 7, "Date:")
+        pdf.set_font("helvetica", "", 10)
+        pdf.cell(0, 7, str(run.finished_at or run.started_at), new_x="LMARGIN", new_y="NEXT")
+
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(40, 7, "Confidence Score:")
+        pdf.set_font("helvetica", "", 10)
+        pdf.cell(0, 7, f"{int(s.overall_confidence * 100)}%", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(5)
+
+        # Most Important Update
+        pdf.set_fill_color(245, 235, 230)  # light background accent
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(0, 8, "MOST CRITICAL UPDATE", new_x="LMARGIN", new_y="NEXT", fill=True)
+        pdf.set_font("helvetica", "B", 10)
+        pdf.multi_cell(0, 6, s.most_important_update)
+        pdf.ln(8)
+
+        # Market & Locality Updates
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(0, 8, "Market & Key Local Updates", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("helvetica", "", 10)
+        if s.market_and_entities:
+            for item in s.market_and_entities:
+                pdf.multi_cell(0, 6, f"- {item}")
+                pdf.ln(1)
+        else:
+            pdf.set_font("helvetica", "I", 10)
+            pdf.cell(0, 6, "No market updates reported.", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("helvetica", "", 10)
+        pdf.ln(5)
+
+        # Policy & Regulations
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(0, 8, "Policy & Regulations Updates", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("helvetica", "", 10)
+        if s.policy_and_news:
+            for item in s.policy_and_news:
+                pdf.multi_cell(0, 6, f"- {item}")
+                pdf.ln(1)
+        else:
+            pdf.set_font("helvetica", "I", 10)
+            pdf.cell(0, 6, "No policy or regulation updates reported.", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("helvetica", "", 10)
+        pdf.ln(5)
+
+        # Uncertainty Log
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(0, 8, "Groundedness & Uncertainty Audit", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("helvetica", "", 10)
+        if s.uncertainty_log:
+            for item in s.uncertainty_log:
+                pdf.multi_cell(0, 6, f"- {item}")
+                pdf.ln(1)
+        else:
+            pdf.set_font("helvetica", "I", 10)
+            pdf.cell(0, 6, "All reported facts fully grounded and verified.", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("helvetica", "", 10)
+        pdf.ln(5)
+
+        # Citations
+        if s.citations:
+            pdf.set_font("helvetica", "B", 12)
+            pdf.cell(0, 8, "Sources & Citations", new_x="LMARGIN", new_y="NEXT")
+            for idx, cit in enumerate(s.citations, 1):
+                pdf.set_font("helvetica", "B", 9)
+                pdf.cell(0, 5, f"Source #{idx} (Confidence: {int(cit.confidence * 100)}%)", new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font("helvetica", "", 9)
+                txt = f"Chunk ID: {cit.chunk_id}"
+                if cit.quote:
+                    txt = f"Quote: \"{cit.quote}\"\n{txt}"
+                pdf.multi_cell(0, 5, txt)
+                pdf.ln(2)
+
+        content = bytes(pdf.output())
+        filename = f"BizPulse_Report_{run_id}.pdf"
+        return Response(
+            content=content,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
+    from bizpulse.models import MarketingStrategy
     s = run.final_output
+    assert isinstance(s, MarketingStrategy)
     pdf = BizPulsePDF()
     pdf.add_page()
 
@@ -216,7 +325,60 @@ def download_run(
     if run.final_output is None:
         raise HTTPException(status_code=400, detail="run has no final strategy to download")
 
+    if run.run_type == "daily_research":
+        from bizpulse.models import DailyResearchReport
+        s = run.final_output
+        assert isinstance(s, DailyResearchReport)
+
+        md = [
+            "# BizPulse Daily Research Report",
+            f"**Business URL:** {run.business_id}",
+            f"**Industry:** {s.industry}",
+            f"**Date:** {run.finished_at or run.started_at}",
+            f"**Confidence Score:** {int(s.overall_confidence * 100)}%",
+            f"\n## Most Critical Update\n> {s.most_important_update}",
+            "\n## Market & Key Local Updates",
+        ]
+        if s.market_and_entities:
+            for item in s.market_and_entities:
+                md.append(f"- {item}")
+        else:
+            md.append("*No market updates reported.*")
+
+        md.append("\n## Policy & Regulations Updates")
+        if s.policy_and_news:
+            for item in s.policy_and_news:
+                md.append(f"- {item}")
+        else:
+            md.append("*No policy or regulation updates reported.*")
+
+        md.append("\n## Groundedness & Uncertainty Audit")
+        if s.uncertainty_log:
+            for item in s.uncertainty_log:
+                md.append(f"- {item}")
+        else:
+            md.append("*All reported facts fully grounded and verified.*")
+
+        if s.citations:
+            md.append("\n## Sources & Citations")
+            for idx, cit in enumerate(s.citations, 1):
+                md.append(f"### Source #{idx}")
+                md.append(f"- **Confidence:** {int(cit.confidence * 100)}%")
+                if cit.quote:
+                    md.append(f"- **Quote:** \"{cit.quote}\"")
+                md.append(f"- **Chunk ID:** `{cit.chunk_id}`")
+
+        content = "\n".join(md)
+        filename = f"BizPulse_Report_{run_id}.md"
+        return Response(
+            content=content,
+            media_type="text/markdown",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
+    from bizpulse.models import MarketingStrategy
     s = run.final_output
+    assert isinstance(s, MarketingStrategy)
     md = [
         "# BizPulse Marketing Strategy Report",
         f"**Business URL:** {run.business_id}",
@@ -291,8 +453,14 @@ async def chat_run(
     run = store.get_run(run_id)
     if run is None or run.tenant_id != tenant.id:
         raise HTTPException(status_code=404, detail="run not found")
+    if run.run_type == "daily_research":
+        raise HTTPException(status_code=400, detail="Chat is only supported for marketing strategy reports")
     if run.final_output is None:
         raise HTTPException(status_code=400, detail="run has no final strategy to chat about")
+
+    from bizpulse.models import MarketingStrategy
+    s = run.final_output
+    assert isinstance(s, MarketingStrategy)
 
     council = _pick_council()
     if council is None:
@@ -304,14 +472,29 @@ async def chat_run(
     runner = AgentRunner(
         retrieval=RetrievalEngine(repo, embedder=_pick_embedder()),
         council=council,
-        industry=run.final_output.industry,
+        industry=s.industry,
     )
 
     reply = await chat_about_recommendation(
         runner=runner,
-        strategy=run.final_output,
+        strategy=s,
         recommendation_index=body.recommendation_index,
         user_message=body.message,
     )
 
     return RecommendationChatResponse(reply=reply)
+
+
+@router.delete("/{run_id}", status_code=status.HTTP_200_OK)
+def delete_run(
+    run_id: UUID,
+    tenant: Tenant = Depends(require_tenant),
+    store: Store = Depends(get_store),
+) -> dict:
+    run = store.get_run(run_id)
+    if run is None or run.tenant_id != tenant.id:
+        raise HTTPException(status_code=404, detail="run not found")
+    success = store.delete_run(run_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="failed to delete run")
+    return {"status": "success", "detail": f"Run {run_id} deleted"}

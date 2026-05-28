@@ -104,9 +104,9 @@ class Council:
         self.fallback_judges: list[LLMClient] = []
         if fallback_judge is not None:
             self.fallback_judges.append(fallback_judge)
-            for m in self.members:
-                if m.name != judge.name and m.name != fallback_judge.name:
-                    self.fallback_judges.append(m)
+        for m in self.members:
+            if m.name != judge.name and (fallback_judge is None or m.name != fallback_judge.name):
+                self.fallback_judges.append(m)
         self.rounds = rounds
         self.round_temperature = round_temperature
         self.synthesis_temperature = synthesis_temperature
@@ -166,13 +166,16 @@ class Council:
                     )
                     break
                 except Exception as fb_exc:
-                    log.warning("council.fallback_judge_failed", judge=fb.name, error=str(fb_exc)[:200])
+                    log.warning(
+                        "council.fallback_judge_failed", judge=fb.name, error=str(fb_exc)[:200]
+                    )
                     last_err = fb_exc
             if synth is None:
                 raise CouncilError(
                     f"judge {self.judge.name} failed and all fallbacks failed. Last error: {last_err}"
                 ) from last_err
 
+        assert synth is not None
         total_cost = synth.cost_usd + sum(p.cost_usd for r in rounds for p in r)
         latency_ms = (time.perf_counter() - t0) * 1000.0
 

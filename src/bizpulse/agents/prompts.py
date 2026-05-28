@@ -54,6 +54,9 @@ _AGENT_ROLES: dict[AgentName, str] = {
     "critic": "You re-read the Strategist's output and verify every analytical claim is supported by a real chunk in the context. Flag ungrounded claims, fabricated competitors, or schema violations. Return either a clean output or a list of issues for retry.",
     "compliance_checker": "You score a MarketingStrategy against jurisdiction-specific regulations (RBI, SEBI, IRDAI, RERA, DPDP, ASCI, GDPR, etc.). For each Recommendation, raise a ComplianceFlag when it triggers a policy's prohibition or misses a required disclosure. Compute the 4 L's metric: Latest (recent regulations honored), Least (least penalty exposure), Lost (lost-revenue avoided), Lowest (lowest cost of compliance).",
     "audience_simulator": "You simulate an audience's reaction to a proposed marketing campaign. Spawn N personas matching the ICP and report aggregate sentiment, common objections, and red flags.",
+    "project_tracker": "You track domain-specific entities and metric movements/trends based on website context.",
+    "policy_tracker": "You track industry-specific policy, interest rate, and regulatory updates affecting the domain.",
+    "research_synthesizer": "You synthesize gathered market news and regulatory changes into a short, plain-language, non-technical daily summary.",
 }
 
 
@@ -106,6 +109,7 @@ class PromptBuilder:
             )
         if few_shot_examples:
             import json as json_lib
+
             parts.append("")
             parts.append("Below are examples of approved, high-quality outputs for similar tasks:")
             for idx, ex in enumerate(few_shot_examples):
@@ -136,7 +140,9 @@ class PromptBuilder:
     ) -> tuple[str, str]:
         return (
             self.system_prompt(agent),
-            self.user_prompt(task, context_chunks, output_schema_name, output_schema_json, few_shot_examples),
+            self.user_prompt(
+                task, context_chunks, output_schema_name, output_schema_json, few_shot_examples
+            ),
         )
 
     # ---------- internals -------------------------------------------------

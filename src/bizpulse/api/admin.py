@@ -21,9 +21,9 @@ import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
-from bizpulse.config import settings
 from bizpulse.api.dependencies import get_store
 from bizpulse.api.usage import daily_limit
+from bizpulse.config import settings
 from bizpulse.models import Tenant
 from bizpulse.models.common import utcnow
 from bizpulse.models.industry import IndustryPack
@@ -303,7 +303,9 @@ def get_gpu_stats(_: None = Depends(require_admin)) -> dict:
         pass
 
     # Sort top users
-    top_users: list[dict[str, Any]] = [{"user": u, "mem": f"{m} MiB", "raw_mem": m} for u, m in user_mem.items()]
+    top_users: list[dict[str, Any]] = [
+        {"user": u, "mem": f"{m} MiB", "raw_mem": m} for u, m in user_mem.items()
+    ]
     top_users.sort(key=lambda x: int(x["raw_mem"]), reverse=True)
 
     return {"gpus": stats, "top_users": top_users[:10]}
@@ -425,14 +427,17 @@ def bulk_patch_tenants(
             if body.update_limit:
                 new_val = None if body.clear_daily_limit_override else body.daily_limit_override
                 if before.daily_limit_override != new_val:
-                    diff["daily_limit_override"] = {"before": before.daily_limit_override, "after": new_val}
+                    diff["daily_limit_override"] = {
+                        "before": before.daily_limit_override,
+                        "after": new_val,
+                    }
             if body.update_suspended and before.suspended != body.suspended:
                 diff["suspended"] = {"before": before.suspended, "after": body.suspended}
             if body.update_notes and before.notes != body.notes:
                 diff["notes"] = {"before": before.notes, "after": body.notes}
             if body.update_is_test and before.is_test != body.is_test:
                 diff["is_test"] = {"before": before.is_test, "after": body.is_test}
-            
+
             if diff:
                 audit_details.append({"id": str(tid), "name": before.name, "diff": diff})
 
@@ -504,7 +509,7 @@ def delete_tenant(
     before = store.get_tenant(tenant_id)
     if before is None:
         raise HTTPException(status_code=404, detail="not found")
-    
+
     success = store.delete_tenant(tenant_id)
     if not success:
         raise HTTPException(status_code=500, detail="failed to delete tenant")

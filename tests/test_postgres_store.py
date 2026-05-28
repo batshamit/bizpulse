@@ -94,3 +94,33 @@ def test_slugify_helper() -> None:
     assert all(c.isalnum() or c == "-" for c in s)
     # uniqueness
     assert slugify("Acme") != slugify("Acme")
+
+
+def test_fail_orphaned_runs(store: PostgresStore) -> None:
+    tenant = store.create_tenant(name="pytest cleanup tenant", slug=_uniq("cleanup"))
+    biz = store.create_business(tenant.id, url="https://cleanup-test.example", industry="fintech")
+
+    # Create two runs: one pending, one complete
+    run1 = store.create_run(tenant.id, biz.id)
+    assert run1.status == "pending"
+
+    run2 = store.create_run(tenant.id, biz.id)
+    store.update_run_status(run2.id, "complete")
+
+    # Change run1 to analyzing
+    store.update_run_status(run1.id, "analyzing")
+
+    # Run cleanup
+    count = store.fail_orphaned_runs()
+    assert count >= 1
+
+    # Verify status
+    r1 = store.get_run(run1.id)
+    assert r1 is not None
+    assert r1.status == "failed"
+    assert r1.error == "Run aborted due to server restart/reload"
+    assert r1.finished_at is not None
+
+    r2 = store.get_run(run2.id)
+    assert r2 is not None
+    assert r2.status == "complete"

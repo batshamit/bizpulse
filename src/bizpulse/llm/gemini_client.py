@@ -83,6 +83,25 @@ class GeminiClient:
                 async with httpx.AsyncClient(timeout=self._timeout) as client:
                     r = await client.post(url, json=payload)
                 if r.status_code == 429 or 500 <= r.status_code < 600:
+                    err_msg = r.text.lower()
+                    if r.status_code == 429 and any(
+                        w in err_msg
+                        for w in (
+                            "quota",
+                            "billing",
+                            "exceeded",
+                            "credits",
+                            "insufficient",
+                            "tokens per day",
+                            "tpd",
+                        )
+                    ):
+                        raise LLMError(
+                            f"gemini 429 quota/credit error (non-retryable): {r.text[:300]}",
+                            vendor=self.vendor,
+                            model=self.model,
+                            retryable=False,
+                        )
                     raise _GeminiRetryable(f"gemini {r.status_code}: {r.text[:200]}")
                 if r.status_code >= 400:
                     raise LLMError(

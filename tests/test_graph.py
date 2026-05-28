@@ -234,38 +234,42 @@ async def test_graph_few_shot_injection(
     from bizpulse.models.strategy import MarketingStrategy
 
     # 1. Create a dummy few shot MarketingStrategy
-    dummy_strategy = MarketingStrategy.model_validate({
-        "tenant_id": str(runner_with_chunks.retrieval.repo.tenant_id),
-        "business_id": str(uuid4()),
-        "industry": "fintech",
-        "brand": {
-            "positioning": "past-positioning",
-            "tone": "past-tone",
-            "value_props": ["past-prop"],
-            "citations": [{"chunk_id": _CHUNK_ID, "quote": "past-quote", "confidence": 0.99}]
-        },
-        "audience": {
-            "primary": {
-                "name": "Past ICP",
-                "description": "past desc",
-                "motivations": [],
-                "pain_points": [],
-                "citations": [{"chunk_id": _CHUNK_ID, "quote": "past-quote", "confidence": 0.99}]
+    dummy_strategy = MarketingStrategy.model_validate(
+        {
+            "tenant_id": str(runner_with_chunks.retrieval.repo.tenant_id),
+            "business_id": str(uuid4()),
+            "industry": "fintech",
+            "brand": {
+                "positioning": "past-positioning",
+                "tone": "past-tone",
+                "value_props": ["past-prop"],
+                "citations": [{"chunk_id": _CHUNK_ID, "quote": "past-quote", "confidence": 0.99}],
             },
-            "citations": [{"chunk_id": _CHUNK_ID, "quote": "past-quote", "confidence": 0.99}]
-        },
-        "recommendations": [
-            {
-                "channel": "linkedin",
-                "action": "past action",
-                "rationale": "past rationale",
-                "evidence_chunk_ids": [_CHUNK_ID],
-                "confidence": 0.99
-            }
-        ],
-        "overall_confidence": 0.99,
-        "summary": "past summary"
-    })
+            "audience": {
+                "primary": {
+                    "name": "Past ICP",
+                    "description": "past desc",
+                    "motivations": [],
+                    "pain_points": [],
+                    "citations": [
+                        {"chunk_id": _CHUNK_ID, "quote": "past-quote", "confidence": 0.99}
+                    ],
+                },
+                "citations": [{"chunk_id": _CHUNK_ID, "quote": "past-quote", "confidence": 0.99}],
+            },
+            "recommendations": [
+                {
+                    "channel": "linkedin",
+                    "action": "past action",
+                    "rationale": "past rationale",
+                    "evidence_chunk_ids": [_CHUNK_ID],
+                    "confidence": 0.99,
+                }
+            ],
+            "overall_confidence": 0.99,
+            "summary": "past summary",
+        }
+    )
 
     # 2. Intercept the AgentRunner.run method to inspect kw["few_shot_examples"]
     captured_few_shots = {}
@@ -286,7 +290,7 @@ async def test_graph_few_shot_injection(
         "business_id": uuid4(),
         "industry": "fintech",
         "business_url": "https://example.test",
-        "few_shots": [dummy_strategy]
+        "few_shots": [dummy_strategy],
     }
     await graph.ainvoke(initial)
 
@@ -306,4 +310,3 @@ async def test_graph_few_shot_injection(
     assert len(captured_few_shots["strategist"]) == 1
     assert captured_few_shots["strategist"][0]["summary"] == "past summary"
     assert captured_few_shots["strategist"][0]["brand"]["positioning"] == "past-positioning"
-

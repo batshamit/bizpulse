@@ -316,11 +316,28 @@ class AgentRunner:
             "exactly. Use the field names from the schema (case-sensitive). "
             "No prose, no fences, no extra fields."
         )
-        cr = await self.council.judge.complete(
-            system=system, user=repair_user, max_tokens=self.council.max_tokens, temperature=0.0
-        )
-        data = extract_json(cr.text)
-        return output_schema.model_validate(data)
+        # Try primary judge first, then fall back to fallback judges
+        judges = [self.council.judge, *self.council.fallback_judges]
+        last_exc: Exception | None = None
+        for j in judges:
+            try:
+                cr = await j.complete(
+                    system=system,
+                    user=repair_user,
+                    max_tokens=self.council.max_tokens,
+                    temperature=0.0,
+                )
+                data = extract_json(cr.text)
+                return output_schema.model_validate(data)
+            except Exception as exc:
+                log.warning(
+                    "runner.repair_failed_trying_fallback",
+                    judge=j.name,
+                    error=str(exc)[:200],
+                )
+                last_exc = exc
+        assert last_exc is not None
+        raise last_exc
 
 
 def _compact_schema(model: type[BaseModel]) -> dict[str, object]:

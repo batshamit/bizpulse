@@ -23,6 +23,9 @@ AgentName = Literal[
     "critic",
     "compliance_checker",
     "audience_simulator",  # Phase-2 MiroFish, optional
+    "project_tracker",
+    "policy_tracker",
+    "research_synthesizer",
 ]
 
 AgentStatus = Literal["ok", "retry", "failed"]

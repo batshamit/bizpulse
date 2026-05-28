@@ -15,7 +15,10 @@ from bizpulse.models import (
     BrandAnalysis,
     CompetitiveLandscape,
     ContentAudit,
+    DailyResearchReport,
     MarketingStrategy,
+    PolicyTrackerOutput,
+    ProjectTrackerOutput,
 )
 from bizpulse.models.agents import AgentTrace
 from bizpulse.models.compliance import ComplianceReport
@@ -40,6 +43,8 @@ class AnalysisState(TypedDict, total=False):
     """State/province slug for state-specific regulators (e.g., 'maharashtra')."""
     few_shots: list[MarketingStrategy] | None
     """Successful historical strategies for the same industry to guide in-context learning."""
+    run_type: str
+    """Type of run: 'marketing_strategy' or 'daily_research'."""
 
     # ---- per-agent outputs (each node fills its slot) ----
     brand: BrandAnalysis | None
@@ -47,8 +52,13 @@ class AnalysisState(TypedDict, total=False):
     competitive_landscape: CompetitiveLandscape | None
     content_audit: ContentAudit | None
 
+    # ---- research per-agent outputs ----
+    project_tracker: ProjectTrackerOutput | None
+    policy_tracker: PolicyTrackerOutput | None
+
     # ---- final synthesis ----
     final_strategy: MarketingStrategy | None
+    research_report: DailyResearchReport | None
 
     # ---- compliance audit (added by compliance_checker after strategist) ----
     compliance_report: ComplianceReport | None

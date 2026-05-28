@@ -13,6 +13,7 @@ from __future__ import annotations
 import secrets
 import threading
 from datetime import datetime
+from typing import Literal
 from uuid import UUID, uuid4
 
 from bizpulse.models import (
@@ -52,7 +53,9 @@ class InMemoryStore:
             chosen_slug = slug or slugify(name)
             if chosen_slug in self._tenants_by_slug:
                 raise ValueError(f"slug already in use: {chosen_slug}")
-            tenant = Tenant(name=name, slug=chosen_slug, api_key=_generate_api_key(), is_test=is_test)
+            tenant = Tenant(
+                name=name, slug=chosen_slug, api_key=_generate_api_key(), is_test=is_test
+            )
             self._tenants[tenant.id] = tenant
             self._tenants_by_api_key[tenant.api_key] = tenant.id
             self._tenants_by_slug[tenant.slug] = tenant.id
@@ -231,7 +234,13 @@ class InMemoryStore:
 
     # ----- runs ----------------------------------------------------------
 
-    def create_run(self, tenant_id: TenantId, business_id: BusinessId) -> RunRecord:
+    def create_run(
+        self,
+        tenant_id: TenantId,
+        business_id: BusinessId,
+        run_type: Literal["marketing_strategy", "daily_research"] = "marketing_strategy",
+        inputs: dict | None = None,
+    ) -> RunRecord:
         if tenant_id not in self._tenants:
             raise KeyError(f"unknown tenant: {tenant_id}")
         biz = self._businesses.get(business_id)
@@ -244,10 +253,22 @@ class InMemoryStore:
                 id=uuid4(),
                 tenant_id=tenant_id,
                 business_id=business_id,
+                run_type=run_type,
+                inputs=inputs,
             )
             self._runs[run.id] = run
             self._runs_by_business.setdefault(business_id, []).append(run.id)
             return run
+
+    def delete_run(self, run_id: UUID) -> bool:
+        with self._lock:
+            run = self._runs.pop(run_id, None)
+            if run is None:
+                return False
+            biz_runs = self._runs_by_business.get(run.business_id, [])
+            if run_id in biz_runs:
+                biz_runs.remove(run_id)
+            return True
 
     def get_run(self, run_id: UUID) -> RunRecord | None:
         return self._runs.get(run_id)
@@ -310,6 +331,29 @@ class InMemoryStore:
             "businesses": len(self._businesses),
             "runs": len(self._runs),
         }
+
+    def fail_orphaned_runs(self) -> int:
+        """Find any runs that are currently in a non-terminal state and mark them as failed."""
+        count = 0
+        with self._lock:
+            for run_id, run in list(self._runs.items()):
+                if run.status in {
+                    "pending",
+                    "ingesting",
+                    "embedding",
+                    "analyzing",
+                    "synthesizing",
+                    "critic_review",
+                }:
+                    self._runs[run_id] = run.model_copy(
+                        update={
+                            "status": "failed",
+                            "error": "Run aborted due to server restart/reload",
+                            "finished_at": utcnow(),
+                        }
+                    )
+                    count += 1
+        return count
 
 
 # Singleton — replaced by a Postgres-backed impl in a later phase.
