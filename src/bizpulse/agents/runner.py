@@ -307,18 +307,36 @@ class AgentRunner:
     ) -> T:
         """Re-ask the judge for a corrected JSON output, given the validation error."""
         schema_json = json.dumps(_compact_schema(output_schema), indent=2)
+
+        # Translate/enhance common Pydantic errors to guide LLM repair
+        hints = []
+        if "Field required" in error or "missing" in error:
+            hints.append("- Make sure all required fields are included in the JSON. If a list item under detailed_channel_strategies or brand analysis is missing 'citations', you MUST include a non-empty 'citations' list for that item.")
+        if "min_length" in error or "List should have at least" in error:
+            hints.append("- Make sure list fields (like value_props, citations, evidence_chunk_ids) are not empty and have at least the minimum required number of items.")
+        if "less than" in error or "greater than" in error:
+            hints.append("- Check numeric fields (like confidence, overall_confidence, score) to ensure they are within the allowed minimum and maximum range.")
+
+        hints_str = "\n".join(hints) if hints else ""
+        if hints_str:
+            hints_str = f"\n\n### Critical Repair Hints:\n{hints_str}\n"
+
         repair_user = (
             f"Your previous response did not pass schema validation against "
             f"{output_schema.__name__}. The error was:\n\n{error}\n\n"
-            f"The exact JSON Schema is:\n```json\n{schema_json}\n```\n\n"
+            f"The exact JSON Schema is:\n```json\n{schema_json}\n```\n"
+            f"{hints_str}\n"
             f"Your previous text was:\n\n{council_result.final}\n\n"
             "Reply with ONLY a corrected JSON object that matches the schema "
             "exactly. Use the field names from the schema (case-sensitive). "
             "No prose, no fences, no extra fields."
         )
+
         # Try primary judge first, then fall back to fallback judges
         judges = [self.council.judge, *self.council.fallback_judges]
-        last_exc: Exception | None = None
+        last_validation_error: ValidationError | ValueError | json.JSONDecodeError | None = None
+        last_api_error: Exception | None = None
+
         for j in judges:
             try:
                 cr = await j.complete(
@@ -329,15 +347,33 @@ class AgentRunner:
                 )
                 data = extract_json(cr.text)
                 return output_schema.model_validate(data)
-            except Exception as exc:
+            except (ValidationError, ValueError, json.JSONDecodeError) as exc:
                 log.warning(
-                    "runner.repair_failed_trying_fallback",
+                    "runner.repair_validation_failed_trying_fallback",
                     judge=j.name,
                     error=str(exc)[:200],
                 )
-                last_exc = exc
-        assert last_exc is not None
-        raise last_exc
+                last_validation_error = exc
+            except Exception as exc:
+                log.warning(
+                    "runner.repair_api_failed_trying_fallback",
+                    judge=j.name,
+                    error=str(exc)[:200],
+                )
+                last_api_error = exc
+
+        # Prioritize raising the validation error (which is the actual code/schema generation issue)
+        # over a generic API connection/unfunded key error of downstream fallback nodes.
+        if last_validation_error is not None:
+            raise last_validation_error
+        if last_api_error is not None:
+            raise last_api_error
+
+        raise AgentRunError(
+            f"All fallback judges failed to repair the JSON output. Original error: {error}",
+            raw_text=council_result.final,
+            validation_error=error,
+        )
 
 
 def _compact_schema(model: type[BaseModel]) -> dict[str, object]:
