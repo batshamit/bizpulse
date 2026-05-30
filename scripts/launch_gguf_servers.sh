@@ -7,7 +7,7 @@ set -e
 
 # Paths to GGUF model blobs
 LLAMA_70B="/raid/amit/mylearning/bizpulse/.ollama/models/blobs/sha256-4824460d29f2058aaf6e1118a63a7a197a09bed509f0e7d4e2efb1ee273b447d"
-QWEN_14B="/raid/amit/mylearning/bizpulse/.ollama/models/blobs/sha256-2049f5674b1e92b4464e5729975c9689fcfbf0b0e4443ccf10b5339f370f9a54"
+GEMMA_27B="/raid/amit/mylearning/bizpulse/.ollama/models/blobs/sha256-d7e4b00a7d7a8d03d4eed9b0f3f61a427e9f0fc5dea6aeb414e41dee23dc8ecc"
 GRANITE_8B="/raid/amit/mylearning/bizpulse/.ollama/models/blobs/sha256-59c55d0e7b6a16d103f324fe4d2cc83843936e1ac65e93b632b6dc577d732630"
 
 SERVER_BIN="./llama.cpp/build/bin/llama-server"
@@ -20,14 +20,14 @@ echo "============================================================"
 echo "📍 Launching Llama-3.3-70B GGUF on Port 8801 (GPUs: 5, 6, 7)..."
 tmux send-keys -t bizpulse:8 "CUDA_VISIBLE_DEVICES=5,6,7 $SERVER_BIN -m $LLAMA_70B --port 8801 --gpu-layers 99 --host 127.0.0.1 --ctx-size 32768 --parallel 1 --threads 4 2>&1 | tee logs/llama_70b_server.log" Enter
 
-# Port 8802: Qwen-2.5-14B on GPU 3
-echo "📍 Launching Qwen-2.5-14B GGUF on Port 8802 (GPU: 3)..."
+# Port 8802: Gemma-2-27B on GPU 3
+echo "📍 Launching Gemma-2-27B GGUF on Port 8802 (GPU: 3)..."
 # Create a new tmux window or use window 9 if it exists
 if tmux list-windows -t bizpulse | grep -q "9: "; then
-    tmux send-keys -t bizpulse:9 "CUDA_VISIBLE_DEVICES=3 $SERVER_BIN -m $QWEN_14B --port 8802 --gpu-layers 99 --host 127.0.0.1 --ctx-size 32768 --parallel 1 --threads 4 2>&1 | tee logs/qwen_14b_server.log" Enter
+    tmux send-keys -t bizpulse:9 "CUDA_VISIBLE_DEVICES=3 $SERVER_BIN -m $GEMMA_27B --port 8802 --gpu-layers 99 --host 127.0.0.1 --ctx-size 32768 --parallel 1 --threads 4 2>&1 | tee logs/gemma_27b_server.log" Enter
 else
-    tmux new-window -t bizpulse -n qwen-14b-gguf -c "$PWD"
-    tmux send-keys -t bizpulse:qwen-14b-gguf "CUDA_VISIBLE_DEVICES=3 $SERVER_BIN -m $QWEN_14B --port 8802 --gpu-layers 99 --host 127.0.0.1 --ctx-size 32768 --parallel 1 --threads 4 2>&1 | tee logs/qwen_14b_server.log" Enter
+    tmux new-window -t bizpulse -n gemma-27b-gguf -c "$PWD"
+    tmux send-keys -t bizpulse:gemma-27b-gguf "CUDA_VISIBLE_DEVICES=3 $SERVER_BIN -m $GEMMA_27B --port 8802 --gpu-layers 99 --host 127.0.0.1 --ctx-size 32768 --parallel 1 --threads 4 2>&1 | tee logs/gemma_27b_server.log" Enter
 fi
 
 # Port 8803: Granite-3.2-8B on GPU 7

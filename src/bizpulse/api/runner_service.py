@@ -233,13 +233,13 @@ def _pick_council(num_llms: int | None = None, speed: str = "general") -> Counci
                 members.append(ollama_chat_client())
 
                 # Check if GPU-accelerated GGUF servers are running on 8802/8803, and prioritize them over CPU Ollama
-                qwen14b_gguf_gpu_active = False
+                gemma27b_gguf_gpu_active = False
                 try:
                     import httpx
                     resp = httpx.get("http://127.0.0.1:8802/v1/models", timeout=0.5)
                     if resp.status_code == 200:
-                        members.append(ollama_chat_client(model="qwen2.5:14b", base_url="http://127.0.0.1:8802/v1"))
-                        qwen14b_gguf_gpu_active = True
+                        members.append(ollama_chat_client(model="gemma-2-27b", base_url="http://127.0.0.1:8802/v1"))
+                        gemma27b_gguf_gpu_active = True
                 except Exception:
                     pass
 
@@ -257,7 +257,7 @@ def _pick_council(num_llms: int | None = None, speed: str = "general") -> Counci
                 ollama_url = "http://127.0.0.1:11434/v1"
                 for local_model in ["gemma2:27b", "qwen2.5:14b", "gemma2:9b", "granite3.2:8b"]:
                     # Skip adding them as CPU fallbacks if we already have them running on GPU
-                    if local_model == "qwen2.5:14b" and qwen14b_gguf_gpu_active:
+                    if local_model == "gemma2:27b" and gemma27b_gguf_gpu_active:
                         continue
                     if local_model == "granite3.2:8b" and granite_gpu_active:
                         continue
