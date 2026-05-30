@@ -110,9 +110,15 @@ def test_fail_orphaned_runs(store: PostgresStore) -> None:
     # Change run1 to analyzing
     store.update_run_status(run1.id, "analyzing")
 
-    # Manually backdate the started_at timestamp in the DB to exceed the 1 hour threshold
+    # Manually backdate started_at, set a different PID, and backdate last_heartbeat_at to exceed the threshold
     with store._pool.connection() as conn, conn.cursor() as cur:
-        cur.execute("UPDATE runs SET started_at = now() - interval '2 hours' WHERE id = %s", (run1.id,))
+        cur.execute(
+            "UPDATE runs SET "
+            "started_at = now() - interval '2 hours', "
+            "output = jsonb_set(jsonb_set(output, '{pid}', '999999'::jsonb), '{last_heartbeat_at}', to_jsonb((now() - interval '2 hours')::text)) "
+            "WHERE id = %s",
+            (str(run1.id),)
+        )
 
     # Run cleanup
     count = store.fail_orphaned_runs()

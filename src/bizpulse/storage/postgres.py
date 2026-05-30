@@ -567,9 +567,11 @@ class PostgresStore:
     def fail_orphaned_runs(self) -> int:
         """Find any runs that are currently in a non-terminal state and mark them as failed."""
         import socket
+        import os
         from datetime import timedelta
         
         current_hostname = socket.gethostname()
+        current_pid = str(os.getpid())
         cutoff = utcnow() - timedelta(minutes=2)
         cutoff_str = cutoff.isoformat()
         
@@ -579,11 +581,11 @@ class PostgresStore:
                 "finished_at = now() "
                 "WHERE status NOT IN ('complete', 'failed') "
                 "AND ( "
-                "    output->>'hostname' = %s "
+                "    (output->>'hostname' = %s AND (output->>'pid' IS NULL OR output->>'pid' != %s)) "
                 "    OR output->>'last_heartbeat_at' IS NULL "
                 "    OR (output->>'last_heartbeat_at')::timestamp with time zone < %s::timestamp with time zone "
                 ")",
-                (current_hostname, cutoff_str),
+                (current_hostname, current_pid, cutoff_str),
             )
             return cur.rowcount
 

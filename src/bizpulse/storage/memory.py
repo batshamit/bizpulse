@@ -416,14 +416,19 @@ class InMemoryStore:
     def fail_orphaned_runs(self) -> int:
         """Find any runs that are currently in a non-terminal state and mark them as failed."""
         import socket
+        import os
         from datetime import timedelta
         count = 0
         current_hostname = socket.gethostname()
+        current_pid = os.getpid()
         cutoff = utcnow() - timedelta(minutes=2)
         with self._lock:
             for run_id, run in list(self._runs.items()):
                 if run.status not in {"complete", "failed"}:
-                    is_local_zombie = run.hostname == current_hostname
+                    is_local_zombie = (
+                        run.hostname == current_hostname
+                        and (run.pid is None or run.pid != current_pid)
+                    )
                     is_timeout_zombie = (
                         run.last_heartbeat_at is None or run.last_heartbeat_at < cutoff
                     )
