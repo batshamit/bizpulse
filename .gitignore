@@ -55,3 +55,20 @@ hf_cache/
 *.key
 secrets/
 credentials.json
+
+# Local third-party, tools, cache, and outputs
+.ollama/
+.qdrant-initialized
+.venv
+developer_activity.md
+lib/
+llama.cpp/
+ollama
+ollama-linux-amd64.tgz
+outputs/
+qdrant_musl.tar.gz
+scratch/
+test.pdf
+var/
+vendor/
+
