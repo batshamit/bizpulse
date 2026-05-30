@@ -20,7 +20,7 @@ def test_get_business_name_from_url() -> None:
 
 @pytest.mark.asyncio
 async def test_google_search_client_disabled() -> None:
-    client = GoogleSearchClient(api_key=None, cse_id=None)
+    client = GoogleSearchClient(api_key=None, cse_id=None, allow_fallback=False)
     results = await client.search("test query")
     assert results == []
 

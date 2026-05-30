@@ -33,48 +33,96 @@ def _get_business_name_from_url(url: str) -> str:
 
 
 class GoogleSearchClient:
-    def __init__(self, api_key: str | None = None, cse_id: str | None = None) -> None:
+    def __init__(self, api_key: str | None = None, cse_id: str | None = None, allow_fallback: bool = True) -> None:
         self.api_key = api_key or settings.google_api_key
         self.cse_id = cse_id or settings.google_cse_id
+        self.allow_fallback = allow_fallback
 
     async def search(self, query: str, num_results: int = 5) -> list[dict[str, str]]:
-        if not self.api_key or not self.cse_id:
-            log.warning("google_search.disabled", reason="missing API key or CSE ID")
+        results = []
+        if self.api_key and self.cse_id:
+            url = "https://www.googleapis.com/customsearch/v1"
+            params: dict[str, Any] = {
+                "key": self.api_key,
+                "cx": self.cse_id,
+                "q": query,
+                "num": num_results,
+            }
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(url, params=params)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        items = data.get("items", [])
+                        for item in items:
+                            results.append(
+                                {
+                                    "title": item.get("title", ""),
+                                    "link": item.get("link", ""),
+                                    "snippet": item.get("snippet", ""),
+                                }
+                            )
+                        if results:
+                            log.info("google_search.success", count=len(results))
+                            return results
+                    else:
+                        log.warning(
+                            "google_search.failed_status",
+                            status_code=resp.status_code,
+                            text=resp.text[:300],
+                        )
+            except Exception as exc:
+                log.warning("google_search.failed_exception", error=str(exc))
+
+        # Fallback to DuckDuckGo if Google search is disabled, failed, or returned empty results
+        if not self.allow_fallback:
+            log.info("google_search.fallback_disabled")
             return []
+        log.info("google_search.trigger_fallback", query=query)
+        return await self._duckduckgo_search_fallback(query, num_results)
 
-        url = "https://www.googleapis.com/customsearch/v1"
-        params: dict[str, Any] = {
-            "key": self.api_key,
-            "cx": self.cse_id,
-            "q": query,
-            "num": num_results,
+    async def _duckduckgo_search_fallback(self, query: str, num_results: int = 5) -> list[dict[str, str]]:
+        url = "https://html.duckduckgo.com/html/"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
-
+        params = {"q": query}
         try:
+            from bs4 import BeautifulSoup
             async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(url, params=params)
+                resp = await client.get(url, params=params, headers=headers)
                 if resp.status_code != 200:
-                    log.warning(
-                        "google_search.failed_status",
-                        status_code=resp.status_code,
-                        text=resp.text[:300],
-                    )
+                    log.warning("ddg_search_fallback.failed_status", status_code=resp.status_code)
                     return []
-
-                data = resp.json()
-                items = data.get("items", [])
+                
+                soup = BeautifulSoup(resp.text, "html.parser")
                 results = []
-                for item in items:
-                    results.append(
-                        {
-                            "title": item.get("title", ""),
-                            "link": item.get("link", ""),
-                            "snippet": item.get("snippet", ""),
-                        }
-                    )
+                for result_div in soup.find_all("div", class_="result"):
+                    if len(results) >= num_results:
+                        break
+                    title_a = result_div.find("a", class_="result__a")
+                    snippet_a = result_div.find("a", class_="result__snippet")
+                    if title_a:
+                        title = title_a.get_text(strip=True)
+                        link = title_a.get("href")
+                        # Parse DDG proxy links if present
+                        if link and link.startswith("/l/?"):
+                            from urllib.parse import parse_qs
+                            parsed_link = parse_qs(urlparse(link).query)
+                            if "uddg" in parsed_link:
+                                link = parsed_link["uddg"][0]
+                        
+                        snippet = snippet_a.get_text(strip=True) if snippet_a else ""
+                        if link:
+                            results.append({
+                                "title": title,
+                                "link": link,
+                                "snippet": snippet
+                            })
+                log.info("ddg_search_fallback.success", count=len(results))
                 return results
         except Exception as exc:
-            log.warning("google_search.failed_exception", error=str(exc))
+            log.warning("ddg_search_fallback.failed_exception", error=str(exc))
             return []
 
     async def gather_all_perspectives(
@@ -85,12 +133,12 @@ class GoogleSearchClient:
         state: str | None = None,
     ) -> list[dict[str, str]]:
         """Gathers latest deals, launches, budget news, scarcity/demand trends,
-
         and research publications from both regional and global perspectives.
         """
         if not self.api_key or not self.cse_id:
-            log.info("google_search.skipped", reason="no credentials configured")
-            return []
+            if not self.allow_fallback:
+                log.info("google_search.skipped", reason="no credentials configured")
+                return []
 
         biz_name = _get_business_name_from_url(business_url)
         location_str = country

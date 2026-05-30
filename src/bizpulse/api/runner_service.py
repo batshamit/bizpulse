@@ -482,6 +482,90 @@ def _user_context_artifact(business: Business, context: str) -> RawArtifact:
     )
 
 
+async def _extract_intel_from_search(
+    artifacts: list[RawArtifact],
+    industry: str,
+    country: str,
+    state: str | None,
+    council,
+) -> dict:
+    """Extracts policy, research, deals, climate, and competitor insights from search artifacts
+    using a fast LLM call. This acts as the bulletproof single-run fallback.
+    """
+    if not artifacts:
+        return {}
+
+    # Compile all search snippets into a single text block
+    search_texts = []
+    for a in artifacts:
+        if a.source_type == "website_page" and "Category:" in a.extracted_text:
+            search_texts.append(a.extracted_text)
+    
+    if not search_texts:
+        return {}
+
+    context = "\n\n".join(search_texts[:15]) # Limit to top 15 results to prevent context overflow
+
+    system_prompt = (
+        "You are a Lead Intelligence Analyst. Your task is to analyze the provided real-time "
+        "search results and extract structured intelligence fields for the given industry and location.\n\n"
+        "You MUST return a JSON object with the exact keys and structures specified below. "
+        "No prose, no fences.\n\n"
+        "JSON Schema:\n"
+        "{\n"
+        '  "academic_research": [\n'
+        "    {\n"
+        '      "title": "Title of paper or breakthrough",\n'
+        '      "key_findings": "Summary of what they discovered",\n'
+        '      "business_application": "How this industry can apply it"\n'
+        "    }\n"
+        "  ],\n"
+        '  "policy_and_politics": {\n'
+        '    "regulatory": ["Up to 3 specific regulatory/legal changes"],\n'
+        '    "financial": ["Up to 3 financial/tax/budget updates"],\n'
+        '    "geopolitical": ["Up to 3 geopolitical/tariffs/trade shifts"]\n'
+        "  },\n"
+        '  "business_deals": [\n'
+        "    {\n"
+        '      "entities": "Companies/entities involved",\n'
+        '      "strategic_impact": "Impact of M&A/partnership/funding deal"\n'
+        "    }\n"
+        "  ],\n"
+        '  "climate_and_weather": {\n'
+        '    "threats": ["Up to 3 specific climate/ESG/weather threats"],\n'
+        '    "opportunities": ["Up to 3 specific operational/ESG opportunities"]\n'
+        "  },\n"
+        '  "competitors_and_products": {\n'
+        '    "new_products": ["Up to 3 new product specifications/launches"],\n'
+        '    "competitor_moves": ["Up to 3 competitor moves/pivots/funding"],\n'
+        '    "client_sentiment": ["Up to 3 client feedback/market-need trends"]\n'
+        "  },\n"
+        '  "emerging_radar": ["Up to 3 miscellaneous critical anomalies or local signals"]\n'
+        "}"
+    )
+
+    user_prompt = (
+        f"Analyze the search results for the {industry} industry in {country} "
+        f"{f'({state})' if state else ''} and return the JSON object.\n\n"
+        f"Search Results:\n{context}"
+    )
+
+    try:
+        from bizpulse.compliance.checker import extract_json
+        # Use the council's judge to run the fast extraction
+        cr = await council.judge.complete(
+            system=system_prompt,
+            user=user_prompt,
+            max_tokens=2048,
+            temperature=0.1,
+        )
+        data = extract_json(cr.text)
+        return data
+    except Exception as exc:
+        log.warning("runner.extract_intel_from_search.failed", error=str(exc))
+        return {}
+
+
 async def _heartbeat_sender(run_id: UUID, store: Store, stop_event: asyncio.Event) -> None:
     import socket
     import os
@@ -721,21 +805,47 @@ async def _run_analysis_background_impl(
         strategy = final.get("research_report")
     else:
         strategy = final.get("final_strategy")
-        if strategy and daily_research_run and isinstance(daily_research_run.final_output, DailyResearchReport):
-            report = daily_research_run.final_output
-            try:
-                strategy = strategy.model_copy(
-                    update={
-                        "research_and_innovation": [p.model_dump() for p in report.academic_research],
-                        "policy_and_politics": report.policy_and_politics.model_dump(),
-                        "business_deals": [d.model_dump() for d in report.business_deals],
-                        "climate_and_weather": report.climate_and_weather.model_dump(),
-                        "competitors_and_products": report.competitors_and_products.model_dump(),
-                        "emerging_radar": report.emerging_radar,
-                    }
-                )
-            except Exception as exc:
-                log.warning("runner.populate_bridge_fields.failed", error=str(exc))
+        if strategy:
+            if daily_research_run and isinstance(daily_research_run.final_output, DailyResearchReport):
+                report = daily_research_run.final_output
+                try:
+                    strategy = strategy.model_copy(
+                        update={
+                            "research_and_innovation": [p.model_dump() for p in report.academic_research],
+                            "policy_and_politics": report.policy_and_politics.model_dump(),
+                            "business_deals": [d.model_dump() for d in report.business_deals],
+                            "climate_and_weather": report.climate_and_weather.model_dump(),
+                            "competitors_and_products": report.competitors_and_products.model_dump(),
+                            "emerging_radar": report.emerging_radar,
+                        }
+                    )
+                except Exception as exc:
+                    log.warning("runner.populate_bridge_fields.failed", error=str(exc))
+            else:
+                # SINGLE-RUN FALLBACK: Extract intelligence directly from retrieved search artifacts
+                try:
+                    log.info("runner.populate_bridge_fields.single_run_fallback.start")
+                    extracted = await _extract_intel_from_search(
+                        artifacts=artifacts,
+                        industry=business.industry or "general",
+                        country=country,
+                        state=state,
+                        council=council,
+                    )
+                    if extracted:
+                        strategy = strategy.model_copy(
+                            update={
+                                "research_and_innovation": extracted.get("academic_research", []),
+                                "policy_and_politics": extracted.get("policy_and_politics", {}),
+                                "business_deals": extracted.get("business_deals", []),
+                                "climate_and_weather": extracted.get("climate_and_weather", {}),
+                                "competitors_and_products": extracted.get("competitors_and_products", {}),
+                                "emerging_radar": extracted.get("emerging_radar", []),
+                            }
+                        )
+                        log.info("runner.populate_bridge_fields.single_run_fallback.success")
+                except Exception as exc:
+                    log.warning("runner.populate_bridge_fields.single_run_fallback.failed", error=str(exc))
     compliance = final.get("compliance_report")
 
     if strategy is None:
