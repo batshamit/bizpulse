@@ -117,7 +117,29 @@
 
     <hr class='bzp-divider'>
 
-    <div style='background:var(--bzp-accent-soft); border:1px solid var(--bzp-accent); border-radius:var(--bzp-radius); padding:1rem 1.2rem; font-size:0.9rem; color:var(--bzp-accent-dark); margin-bottom:1.5rem;'>
+    <!-- Optional reference docs -->
+    <div x-data="docsUpload()" x-init="init()">
+      <label class="bzp-label" style="margin-bottom:0.6rem;">Attach reference documents (optional)</label>
+      <div style="color:var(--bzp-ink-faint); font-size:0.78rem; margin-bottom:0.6rem;">
+        PDF / DOCX / TXT / MD / HTML up to 20 MB each. Examples: a brand-guidelines doc,
+        an internal compliance policy, prior strategy reports. Their text is chunked + embedded
+        into your business's knowledge base and the agents will cite them alongside the URL crawl.
+      </div>
+
+      <!-- We can't upload until the business exists; so this step happens AFTER
+           the user submits the form and we have a business_id. For now, show a
+           hint that docs can be added on the dashboard. The actual upload UI
+           lives on a per-business detail page (next iteration). -->
+      <div style="background:var(--bzp-cream); border:1px dashed var(--bzp-border); border-radius:var(--bzp-radius); padding:1rem 1.2rem; font-size:0.85rem; color:var(--bzp-ink-soft);">
+        💡 After you start the analysis below, you can upload reference docs from the
+        report page (or via <code>POST /v1/businesses/{id}/documents</code>).
+        Re-run the analysis to include them.
+      </div>
+    </div>
+
+    <hr class="bzp-divider">
+
+    <div style="background:var(--bzp-accent-soft); border:1px solid var(--bzp-accent); border-radius:var(--bzp-radius); padding:1rem 1.2rem; font-size:0.9rem; color:var(--bzp-accent-dark); margin-bottom:1.5rem;">
       <strong>What you'll get:</strong>
       <ul style='margin:0.5rem 0 0 1.2rem; padding:0;'>
         <li>Brand · Audience · Competitor · Content audits (4 LLMs proposing in parallel)</li>

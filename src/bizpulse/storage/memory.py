@@ -150,6 +150,57 @@ class InMemoryStore:
 
     # ----- audit log (in-memory) ----------------------------------------
 
+    # ----- reference documents (in-memory) -----------------------------
+
+    def insert_document(self, **kw) -> dict:
+        from datetime import datetime as _dt
+        if not hasattr(self, "_documents"):
+            self._documents: list[dict] = []
+        # dedup by (business_id, sha256)
+        for d in self._documents:
+            if d["business_id"] == str(kw["business_id"]) and d["sha256"] == kw["sha256"]:
+                return {k: v for k, v in d.items() if k != "business_id" and k != "tenant_id"}
+        rec = {
+            "id": str(kw["id"]),
+            "tenant_id": str(kw["tenant_id"]),
+            "business_id": str(kw["business_id"]),
+            "filename": kw["filename"],
+            "content_type": kw["content_type"],
+            "size_bytes": kw["size_bytes"],
+            "n_chunks": kw["n_chunks"],
+            "sha256": kw["sha256"],
+            "extracted_chars": kw.get("extracted_chars", 0),
+            "uploaded_at": _dt.now().isoformat(),
+        }
+        self._documents.append(rec)
+        return {k: v for k, v in rec.items() if k not in ("business_id", "tenant_id")}
+
+    def find_document_by_sha(self, business_id: BusinessId, sha256: str) -> dict | None:
+        if not hasattr(self, "_documents"):
+            return None
+        for d in self._documents:
+            if d["business_id"] == str(business_id) and d["sha256"] == sha256:
+                return {k: v for k, v in d.items() if k not in ("business_id", "tenant_id")}
+        return None
+
+    def list_documents(self, business_id: BusinessId) -> list[dict]:
+        if not hasattr(self, "_documents"):
+            return []
+        return [
+            {k: v for k, v in d.items() if k not in ("business_id", "tenant_id")}
+            for d in self._documents if d["business_id"] == str(business_id)
+        ]
+
+    def delete_document(self, business_id: BusinessId, document_id: UUID) -> bool:
+        if not hasattr(self, "_documents"):
+            return False
+        before = len(self._documents)
+        self._documents = [
+            d for d in self._documents
+            if not (d["business_id"] == str(business_id) and d["id"] == str(document_id))
+        ]
+        return len(self._documents) < before
+
     def insert_audit(self, **kw) -> UUID:
         from datetime import datetime as _dt
         from uuid import uuid4 as _u4
