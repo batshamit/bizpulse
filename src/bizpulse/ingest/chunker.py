@@ -117,3 +117,18 @@ def chunk_artifact(
             chunks.append(Chunk(text=piece, metadata=meta))
 
     return chunks
+
+
+def chunk_text(text: str) -> list[Chunk]:
+    """Helper wrapper that chunks a raw string using chunk_artifact defaults."""
+    from uuid import uuid4
+    dummy_id = uuid4()
+    artifact = RawArtifact(
+        tenant_id=dummy_id,
+        business_id=dummy_id,
+        source_url="doc://upload",
+        source_type="document",
+        content_hash="",
+        extracted_text=text,
+    )
+    return chunk_artifact(artifact)

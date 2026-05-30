@@ -116,6 +116,24 @@ _STRATEGY_JSON = json.dumps(
 )
 
 
+_COMPLIANCE_JSON = json.dumps(
+    {
+        "country": "IN",
+        "state": None,
+        "policies_considered": ["policy-a"],
+        "flags": [],
+        "competitor_compare": [],
+        "metrics": {
+            "last": 0.8,
+            "least": 0.7,
+            "lost": 0.6,
+            "lowest": 0.9,
+            "narrative": "Serves price-sensitive and late adopters."
+        }
+    }
+)
+
+
 def _route(_system: str, user: str) -> str:
     """Match the parenthesized schema name PromptBuilder writes once. Order
     matters: the embedded JSON schema for MarketingStrategy contains nested
@@ -131,6 +149,8 @@ def _route(_system: str, user: str) -> str:
         return _COMPETITOR_JSON
     if "(ContentAudit)" in user:
         return _CONTENT_JSON
+    if "(ComplianceReport)" in user:
+        return _COMPLIANCE_JSON
     return "{}"
 
 
