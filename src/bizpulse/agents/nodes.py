@@ -355,6 +355,13 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
             "  * All recommendations, channel strategies, and benefit reports MUST use a highly professional, "
             "    executive-ready, corporate-standard tone suitable for immediate presentation to C-level executives "
             "    and board members. Focus heavily on real business insights, growth levers, and market acquisition.\n"
+            "  * The Board-Ready recommendations and Detailed Channel Strategies MUST NOT be limited to simple digital/social media advice. "
+            "    You MUST actively synthesize and address the retrieved Market Intelligence in the context, including:\n"
+            "      - Specific regulatory/policy constraints or compliance updates (e.g. SEBI, RBI, RERA, DPDP/GDPR) relevant to this industry and region.\n"
+            "      - Academic breakthroughs or technical innovations.\n"
+            "      - Corporate M&A/deals or competitor pivots.\n"
+            "      - Climate threats and ESG concerns.\n"
+            "    Ensure that at least half of your board-ready recommendations are strategic, domain-specific growth levers grounded in these market intelligence fields.\n"
             "  * Proactively align all recommendations and strategies with applicable regulations and policies "
             "    such as RBI/SEBI digital lending and investment guidelines (for financial/fintech products), "
             "    RERA (for real estate/proptech), DPDP/GDPR (for user data privacy and protection). Ensure that any "
@@ -456,8 +463,8 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
                             agent="strategist",
                             task=task_str,
                             output_schema=MarketingStrategy,
-                            query_text="detailed marketing strategy LinkedIn social media YouTube Instagram Facebook X Threads Google Search WhatsApp B2B Email 4L benefits real business insights executive summary",
-                            top_k=3,
+                            query_text="marketing strategy brand audience competitors content audit policy regulation SEBI RBI DPDP GDPR RERA climate ESG deals acquisitions academic research innovations LinkedIn B2B social media search email",
+                            top_k=12,
                             few_shot_examples=few_shot_examples,
                         )
                         log.info("nodes.strategist.local_llama_8801_success")
@@ -474,8 +481,8 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
                         agent="strategist",
                         task=task_str,
                         output_schema=MarketingStrategy,
-                        query_text="detailed marketing strategy LinkedIn social media YouTube Instagram Facebook X Threads Google Search WhatsApp B2B Email 4L benefits real business insights executive summary",
-                        top_k=3,
+                        query_text="marketing strategy brand audience competitors content audit policy regulation SEBI RBI DPDP GDPR RERA climate ESG deals acquisitions academic research innovations LinkedIn B2B social media search email",
+                        top_k=12,
                         few_shot_examples=few_shot_examples,
                     )
                     log.info("nodes.strategist.local_qwen_14b_8800_success")
@@ -510,8 +517,8 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
                         agent="strategist",
                         task=task_str,
                         output_schema=MarketingStrategy,
-                        query_text="detailed marketing strategy LinkedIn social media YouTube Instagram Facebook X Threads Google Search WhatsApp B2B Email 4L benefits real business insights executive summary",
-                        top_k=3,
+                        query_text="marketing strategy brand audience competitors content audit policy regulation SEBI RBI DPDP GDPR RERA climate ESG deals acquisitions academic research innovations LinkedIn B2B social media search email",
+                        top_k=12,
                         few_shot_examples=few_shot_examples,
                     )
                     log.info("nodes.strategist.google_gemini_success")
@@ -549,8 +556,8 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
                         agent="strategist",
                         task=task_str,
                         output_schema=MarketingStrategy,
-                        query_text="detailed marketing strategy LinkedIn social media YouTube Instagram Facebook X Threads Google Search WhatsApp B2B Email 4L benefits real business insights executive summary",
-                        top_k=3,
+                        query_text="marketing strategy brand audience competitors content audit policy regulation SEBI RBI DPDP GDPR RERA climate ESG deals acquisitions academic research innovations LinkedIn B2B social media search email",
+                        top_k=12,
                         few_shot_examples=few_shot_examples,
                     )
                     log.info("nodes.strategist.groq_llama_3.3_70b_success")
