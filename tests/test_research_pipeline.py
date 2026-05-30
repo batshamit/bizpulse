@@ -19,6 +19,12 @@ from bizpulse.models import (
     ChunkMetadata,
     DailyResearchReport,
     EmbeddedChunk,
+    AcademicTrackerOutput,
+    PolicyAnalystOutput,
+    MarketScoutOutput,
+    EnvironmentalMonitorOutput,
+    CompetitiveIntelligenceOutput,
+    RadarOutput,
 )
 from bizpulse.models.common import SUPPORTED_INDUSTRIES
 from bizpulse.retrieval import TenantQdrant
@@ -35,24 +41,72 @@ class _Embedder:
 
 _CHUNK_ID = str(uuid4())
 
-_PROJECT_JSON = json.dumps(
+_ACADEMIC_JSON = json.dumps(
     {
-        "new_launches": ["DLF Sector 63", "Godrej Woods Phase 2"],
-        "price_movements": ["Sector 63: Rs 15000/sqft to Rs 17000/sqft"],
-        "uncertain_claims": ["12% guaranteed returns on commercial plots"],
+        "papers": [
+            {
+                "title": "Smart Building IoT Protocols",
+                "key_findings": "Using IoT reduces energy consumption by 20%.",
+                "business_application": "Deploy smart thermostats in luxury complexes.",
+            }
+        ],
         "citations": [
-            {"chunk_id": _CHUNK_ID, "quote": "new launch in Sector 63", "confidence": 0.9}
+            {"chunk_id": _CHUNK_ID, "quote": "reduces energy", "confidence": 0.9}
         ],
     }
 )
 
 _POLICY_JSON = json.dumps(
     {
-        "policy_updates": ["RBI holds repo rate at 6.5%"],
-        "market_updates": ["Home loan inquiries up 10%"],
-        "uncertain_claims": ["RERA registration number not yet issued for Godrej Woods Phase 2"],
+        "regulatory": ["RERA mandates escrow accounts."],
+        "financial": ["RBI holds repo rate at 6.5%."],
+        "geopolitical": ["No international trade impacts."],
         "citations": [
-            {"chunk_id": _CHUNK_ID, "quote": "repo rate holds at 6.5%", "confidence": 0.95}
+            {"chunk_id": _CHUNK_ID, "quote": "repo rate holds", "confidence": 0.95}
+        ],
+    }
+)
+
+_MARKET_JSON = json.dumps(
+    {
+        "deals": [
+            {
+                "entities": "DLF and Godrej Properties",
+                "strategic_impact": "DLF Sector 63 luxury launch JV partnership.",
+            }
+        ],
+        "citations": [
+            {"chunk_id": _CHUNK_ID, "quote": "luxury launch", "confidence": 0.9}
+        ],
+    }
+)
+
+_ENV_JSON = json.dumps(
+    {
+        "threats": ["Increased heavy monsoon risks in Gurugram."],
+        "opportunities": ["Green building certification reduces long-term maintenance costs."],
+        "citations": [
+            {"chunk_id": _CHUNK_ID, "quote": "maintenance costs", "confidence": 0.9}
+        ],
+    }
+)
+
+_COMPETITIVE_JSON = json.dumps(
+    {
+        "new_products": ["Smart Homes premium standard features by competitor X."],
+        "competitor_moves": ["Competitor launching 10 new commercial developments."],
+        "client_sentiment": ["Buyers demand ready-to-move-in over under-construction."],
+        "citations": [
+            {"chunk_id": _CHUNK_ID, "quote": "ready-to-move-in", "confidence": 0.9}
+        ],
+    }
+)
+
+_RADAR_JSON = json.dumps(
+    {
+        "anomalies": ["Unusually high inquiry rate in luxury segments during offseason."],
+        "citations": [
+            {"chunk_id": _CHUNK_ID, "quote": "high inquiry rate", "confidence": 0.9}
         ],
     }
 )
@@ -99,18 +153,49 @@ async def test_research_graph_sequential_execution(
     def _route(_system: str, user: str) -> str:
         captured_prompts.append({"system": _system, "user": user})
         if "(DailyResearchReport)" in user:
-            # We dynamically inject industry name to test it handles arbitrary industry string
             return json.dumps(
                 {
                     "tenant_id": str(runner_with_chunks.repo.tenant_id),
                     "business_id": str(uuid4()),
                     "industry": "real_estate",
                     "most_important_update": "RBI holds repo rate at 6.5% keeping home loan costs steady.",
-                    "market_and_entities": [
-                        "DLF Sector 63 launched in Gurugram.",
-                        "Godrej Woods Phase 2 announced in Noida.",
+                    "academic_research": [
+                        {
+                            "title": "Smart Building IoT Protocols",
+                            "key_findings": "Using IoT reduces energy consumption by 20%.",
+                            "business_application": "Deploy smart thermostats in luxury complexes.",
+                        }
                     ],
-                    "policy_and_news": ["RBI holds repo rate at 6.5%."],
+                    "policy_and_politics": {
+                        "regulatory": ["RERA mandates escrow accounts."],
+                        "financial": ["RBI holds repo rate at 6.5%."],
+                        "geopolitical": ["No international trade impacts."],
+                        "citations": [
+                            {"chunk_id": _CHUNK_ID, "quote": "repo rate holds", "confidence": 0.95}
+                        ],
+                    },
+                    "business_deals": [
+                        {
+                            "entities": "DLF and Godrej Properties",
+                            "strategic_impact": "DLF Sector 63 luxury launch JV partnership.",
+                        }
+                    ],
+                    "climate_and_weather": {
+                        "threats": ["Increased heavy monsoon risks in Gurugram."],
+                        "opportunities": ["Green building certification reduces long-term maintenance costs."],
+                        "citations": [
+                            {"chunk_id": _CHUNK_ID, "quote": "maintenance costs", "confidence": 0.9}
+                        ],
+                    },
+                    "competitors_and_products": {
+                        "new_products": ["Smart Homes premium standard features by competitor X."],
+                        "competitor_moves": ["Competitor launching 10 new commercial developments."],
+                        "client_sentiment": ["Buyers demand ready-to-move-in over under-construction."],
+                        "citations": [
+                            {"chunk_id": _CHUNK_ID, "quote": "ready-to-move-in", "confidence": 0.9}
+                        ],
+                    },
+                    "emerging_radar": ["Unusually high inquiry rate in luxury segments during offseason."],
                     "uncertainty_log": [
                         "12% guaranteed returns on commercial plots",
                         "RERA registration number not yet issued for Godrej Woods Phase 2",
@@ -125,10 +210,18 @@ async def test_research_graph_sequential_execution(
                     ],
                 }
             )
-        if "(ProjectTrackerOutput)" in user:
-            return _PROJECT_JSON
-        if "(PolicyTrackerOutput)" in user:
+        if "(AcademicTrackerOutput)" in user:
+            return _ACADEMIC_JSON
+        if "(PolicyAnalystOutput)" in user:
             return _POLICY_JSON
+        if "(MarketScoutOutput)" in user:
+            return _MARKET_JSON
+        if "(EnvironmentalMonitorOutput)" in user:
+            return _ENV_JSON
+        if "(CompetitiveIntelligenceOutput)" in user:
+            return _COMPETITIVE_JSON
+        if "(RadarOutput)" in user:
+            return _RADAR_JSON
         return "{}"
 
     judge = CallableLLMClient(name="judge", vendor="fake", fn=_route)
@@ -157,21 +250,19 @@ async def test_research_graph_sequential_execution(
         report.most_important_update
         == "RBI holds repo rate at 6.5% keeping home loan costs steady."
     )
-    assert "DLF Sector 63 launched in Gurugram." in report.market_and_entities
     assert len(report.uncertainty_log) == 2
     assert "12% guaranteed returns on commercial plots" in report.uncertainty_log
     assert report.overall_confidence == 0.9
 
     # Assert that prompts were generated dynamically using real_estate ontology
-    # project_tracker is run first
-    project_prompt = next(p for p in captured_prompts if "(ProjectTrackerOutput)" in p["user"])
+    # academic_tracker is run
+    academic_prompt = next(p for p in captured_prompts if "(AcademicTrackerOutput)" in p["user"])
     # should contain entities/metrics from real_estate.yaml
-    assert "project" in project_prompt["user"]
-    assert "asset_class" in project_prompt["user"]
-    assert "price-per-sqft trend" in project_prompt["user"]
+    assert "project" in academic_prompt["user"]
+    assert "asset_class" in academic_prompt["user"]
 
-    # policy_tracker is run second
-    policy_prompt = next(p for p in captured_prompts if "(PolicyTrackerOutput)" in p["user"])
+    # policy_analyst is run
+    policy_prompt = next(p for p in captured_prompts if "(PolicyAnalystOutput)" in p["user"])
     # should contain regulations from real_estate.yaml
     assert "RERA" in policy_prompt["user"]
     assert "GST on under-construction property" in policy_prompt["user"]
@@ -190,17 +281,43 @@ async def test_research_graph_parallel_execution(
                     "business_id": str(uuid4()),
                     "industry": "real_estate",
                     "most_important_update": "Parallel update.",
-                    "market_and_entities": [],
-                    "policy_and_news": [],
+                    "academic_research": [],
+                    "policy_and_politics": {
+                        "regulatory": [],
+                        "financial": [],
+                        "geopolitical": [],
+                        "citations": [],
+                    },
+                    "business_deals": [],
+                    "climate_and_weather": {
+                        "threats": [],
+                        "opportunities": [],
+                        "citations": [],
+                    },
+                    "competitors_and_products": {
+                        "new_products": [],
+                        "competitor_moves": [],
+                        "client_sentiment": [],
+                        "citations": [],
+                    },
+                    "emerging_radar": [],
                     "uncertainty_log": [],
                     "overall_confidence": 1.0,
                     "citations": [],
                 }
             )
-        if "(ProjectTrackerOutput)" in user:
-            return _PROJECT_JSON
-        if "(PolicyTrackerOutput)" in user:
+        if "(AcademicTrackerOutput)" in user:
+            return _ACADEMIC_JSON
+        if "(PolicyAnalystOutput)" in user:
             return _POLICY_JSON
+        if "(MarketScoutOutput)" in user:
+            return _MARKET_JSON
+        if "(EnvironmentalMonitorOutput)" in user:
+            return _ENV_JSON
+        if "(CompetitiveIntelligenceOutput)" in user:
+            return _COMPETITIVE_JSON
+        if "(RadarOutput)" in user:
+            return _RADAR_JSON
         return "{}"
 
     judge = CallableLLMClient(name="judge", vendor="fake", fn=_route)
@@ -270,17 +387,43 @@ async def test_dynamic_creation_for_new_domain(
                         "business_id": str(uuid4()),
                         "industry": "temp_crypto_trading",
                         "most_important_update": "SEC approves spot Ethereum ETF.",
-                        "market_and_entities": [],
-                        "policy_and_news": [],
+                        "academic_research": [],
+                        "policy_and_politics": {
+                            "regulatory": [],
+                            "financial": [],
+                            "geopolitical": [],
+                            "citations": [],
+                        },
+                        "business_deals": [],
+                        "climate_and_weather": {
+                            "threats": [],
+                            "opportunities": [],
+                            "citations": [],
+                        },
+                        "competitors_and_products": {
+                            "new_products": [],
+                            "competitor_moves": [],
+                            "client_sentiment": [],
+                            "citations": [],
+                        },
+                        "emerging_radar": [],
                         "uncertainty_log": [],
                         "overall_confidence": 0.95,
                         "citations": [],
                     }
                 )
-            if "(ProjectTrackerOutput)" in user:
-                return _PROJECT_JSON
-            if "(PolicyTrackerOutput)" in user:
+            if "(AcademicTrackerOutput)" in user:
+                return _ACADEMIC_JSON
+            if "(PolicyAnalystOutput)" in user:
                 return _POLICY_JSON
+            if "(MarketScoutOutput)" in user:
+                return _MARKET_JSON
+            if "(EnvironmentalMonitorOutput)" in user:
+                return _ENV_JSON
+            if "(CompetitiveIntelligenceOutput)" in user:
+                return _COMPETITIVE_JSON
+            if "(RadarOutput)" in user:
+                return _RADAR_JSON
             return "{}"
 
         judge = CallableLLMClient(name="judge", vendor="fake", fn=_route)
@@ -305,14 +448,13 @@ async def test_dynamic_creation_for_new_domain(
         assert report.industry == "temp_crypto_trading"
         assert report.most_important_update == "SEC approves spot Ethereum ETF."
 
-        # Verify that project_tracker received the crypto-specific entities and metrics
-        project_prompt = next(p for p in captured_prompts if "(ProjectTrackerOutput)" in p["user"])
-        assert "crypto_token" in project_prompt["user"]
-        assert "exchange_platform" in project_prompt["user"]
-        assert "total value locked" in project_prompt["user"]
+        # Verify that academic_tracker received the crypto-specific entities
+        academic_prompt = next(p for p in captured_prompts if "(AcademicTrackerOutput)" in p["user"])
+        assert "crypto_token" in academic_prompt["user"]
+        assert "exchange_platform" in academic_prompt["user"]
 
-        # Verify that policy_tracker received crypto-specific regulations
-        policy_prompt = next(p for p in captured_prompts if "(PolicyTrackerOutput)" in p["user"])
+        # Verify that policy_analyst received crypto-specific regulations
+        policy_prompt = next(p for p in captured_prompts if "(PolicyAnalystOutput)" in p["user"])
         assert "MiCA guidelines" in policy_prompt["user"]
         assert "SEC spot ETF decisions" in policy_prompt["user"]
         assert "FATF Travel Rule" in policy_prompt["user"]

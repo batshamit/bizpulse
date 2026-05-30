@@ -61,14 +61,47 @@ def build_analysis_graph(
     # without it.
     from langgraph.graph import END, START, StateGraph
 
+    def _realtime_node_wrap(agent_name: str, node_fn: Any) -> Any:
+        """Wrap a LangGraph node to update the run status and agent traces in the database in real-time."""
+        async def wrapped(state: AnalysisState) -> dict[str, Any]:
+            run_id = state.get("run_id")
+            
+            # 1. On node start: Update database status to this agent_name
+            if run_id:
+                try:
+                    from bizpulse.storage import get_default_store
+                    store = get_default_store()
+                    if hasattr(store, "update_run_status"):
+                        store.update_run_status(run_id, agent_name)  # type: ignore
+                except Exception:
+                    pass
+
+            # 2. Invoke actual node function
+            result = await node_fn(state)
+
+            # 3. On node finish: Append new traces to the database in real-time
+            if run_id and isinstance(result, dict):
+                traces = result.get("agent_traces") or []
+                try:
+                    from bizpulse.storage import get_default_store
+                    store = get_default_store()
+                    if hasattr(store, "add_agent_trace"):
+                        for trace in traces:
+                            store.add_agent_trace(run_id, agent_name, trace)  # type: ignore
+                except Exception:
+                    pass
+                    
+            return result
+        return wrapped
+
     g = StateGraph(AnalysisState)
 
-    g.add_node("brand_analyst", make_brand_node(runner))
-    g.add_node("audience_analyst", make_audience_node(runner))
-    g.add_node("competitor_scout", make_competitor_node(runner))
-    g.add_node("content_auditor", make_content_node(runner))
-    g.add_node("strategist", make_strategist_node(runner))
-    g.add_node("compliance_checker", make_compliance_node(compliance_council or runner.council))
+    g.add_node("brand_analyst", _realtime_node_wrap("brand_analyst", make_brand_node(runner)))
+    g.add_node("audience_analyst", _realtime_node_wrap("audience_analyst", make_audience_node(runner)))
+    g.add_node("competitor_scout", _realtime_node_wrap("competitor_scout", make_competitor_node(runner)))
+    g.add_node("content_auditor", _realtime_node_wrap("content_auditor", make_content_node(runner)))
+    g.add_node("strategist", _realtime_node_wrap("strategist", make_strategist_node(runner)))
+    g.add_node("compliance_checker", _realtime_node_wrap("compliance_checker", make_compliance_node(compliance_council or runner.council)))
 
     if sequential:
         # Free-tier-friendly: chain everyone end-to-end so we never have two

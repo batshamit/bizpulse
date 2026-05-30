@@ -1,9 +1,16 @@
-FROM qwen2.5:14b
+FROM llama3.3:70b
 
 # Adjust parameters for stable, structured reasoning
 PARAMETER temperature 0.2
 PARAMETER top_p 0.95
-PARAMETER num_ctx 16384
+
+# Set context window to 32,768 tokens (plenty for enterprise research documents)
+PARAMETER num_ctx 32768
+
+# Allow 3 parallel requests (ideal for concurrent sub-agent execution)
+PARAMETER num_parallel 3
+
+# Set stop tokens
 PARAMETER stop "<|im_start|>"
 PARAMETER stop "<|im_end|>"
 

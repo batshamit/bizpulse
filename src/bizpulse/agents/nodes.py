@@ -47,6 +47,7 @@ def _trace(
     status: str,
     error: str | None = None,
     retries: int = 0,
+    fallback_used: bool = False,
 ) -> AgentTrace:
     """Build an AgentTrace from common kwargs. duration_ms is computed from
     time.perf_counter() handles passed in `started_ms`."""
@@ -61,7 +62,9 @@ def _trace(
         retries=retries,
         status=status,  # type: ignore[arg-type]
         error=error,
+        fallback_used=fallback_used,
     )
+
 
 
 def _node_wrap(agent_name, fn):
@@ -301,12 +304,14 @@ def make_compliance_node(council) -> NodeFn:
 def make_strategist_node(runner: AgentRunner) -> NodeFn:
     """Synthesizes prior agent outputs into the final MarketingStrategy.
 
-    The strategist sees a *compact* summary of prior outputs (not the full
-    verbatim JSON dump — that ballooned the request past per-vendor token
-    ceilings, e.g. Groq's 12K per-request cap). top_k=3 chunks for cite
-    grounding; the bulk of substance comes via the prior summaries."""
+    The strategist sees a *compact* summary of prior outputs. To deliver premium
+    boardroom-ready report quality, we route the strategist directly to the local
+    Llama-3.3-70B AWQ model on port 8801, with a silent fallback to Qwen 14B on port 8800."""
 
     async def strategist(state: AnalysisState) -> dict[str, object]:
+        import os
+        from bizpulse.agents.nodes import _trace, _record_repair, _summarize_prior_compact
+
         prior = _summarize_prior_compact(state)
         t0 = time.perf_counter()
         few_shots = state.get("few_shots")
@@ -324,94 +329,274 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
                     few_shot_examples.append(json.loads(json.dumps(fs, default=str)))
                 else:
                     few_shot_examples.append(fs)
-        try:
-            r = await runner.run(
-                agent="strategist",
-                task=(
-                    "Produce a HIGH-USP, ULTRA-SPECIFIC MarketingStrategy for THIS business. "
-                    "Generic industry advice is a failure. Required fields:\n"
-                    "  - tenant_id, business_id, industry (echo from input)\n"
-                    "  - recommendations (3-7 prioritized items)\n"
-                    "  - detailed_channel_strategies (MANDATORY): Provide deep-dives as a LIST of objects. "
-                    "    Each object MUST have: 'channel' (the slug: 'linkedin', 'google_search', etc.), 'strategy_details' (text), "
-                    "    'key_metrics' (list of strings), 'implementation_steps' (list), "
-                    "    and 'citations' (list of citations). You MUST provide strategies for:\n"
-                    "      * linkedin (separate strategy focused on B2B/Thought-leadership)\n"
-                    "      * youtube or instagram (Social Media)\n"
-                    "      * google_search or email (Search & Direct)\n"
-                    "  - inclusivity_metrics (OPTIONAL): Score the '4 L's' (Last, Least, Lost, Lowest) "
-                    "    based on how this strategy serves those specific segments.\n"
-                    "  - benefit_report: A detailed, multi-paragraph corporate analysis explaining business ROI, "
-                    "    strategic value, and why this specific strategy is highly beneficial for OUR company.\n"
-                    "  - overall_confidence (0..1)\n"
-                    "  - summary (3-5 sentence executive overview)\n\n"
-                    "Strategy quality bar:\n"
-                    "  * All recommendations, channel strategies, and benefit reports MUST use a highly professional, "
-                    "    executive-ready, corporate-standard tone suitable for immediate presentation to C-level executives "
-                    "    and board members.\n"
-                    "  * Proactively align all recommendations and strategies with applicable regulations and policies "
-                    "    such as RBI/SEBI digital lending and investment guidelines (for financial/fintech products), "
-                    "    RERA (for real estate/proptech), DPDP/GDPR (for user data privacy and protection). Ensure that any "
-                    "    proposed actions are structured to prevent compliance or regulatory violations.\n"
-                    "  * Every recommendation and channel strategy MUST reference a specific "
-                    "    business detail lifted from the prior summaries or context.\n"
-                    "  * Take special help from the LinkedIn pages and competitor mentions "
-                    "    found in the retrieved context to collect data on their tactics.\n"
-                    "  * Each recommendation MUST include a CUSTOMER BENEFIT target, "
-                    "    explicitly addressing one of the '4 L's'.\n"
-                    "  * Citations MUST use the exact 'chunk_id' (valid UUID) from the retrieved chunks. "
-                    "    Do NOT invent or shorten chunk_ids.\n\n"
-                    "Set `brand`, `audience`, `competitive_landscape`, `content_audit` "
-                    "to null — they're merged from prior outputs after you return.\n\n"
-                    f"Prior agent outputs (summarized):\n{prior}"
-                ),
-                output_schema=MarketingStrategy,
-                query_text="detailed marketing strategy LinkedIn social media YouTube Instagram Facebook X Threads Google Search WhatsApp B2B Email 4L benefits",
-                top_k=8,
-                few_shot_examples=few_shot_examples,
-            )
-            # Merge the prior analyst outputs back into the strategy so the
-            # final report carries the full structure even though the LLM
-            # only emitted the synthesis-specific fields. Also normalize
-            # `industry` to the canonical slug from state — the LLM
-            # sometimes emits the long form ("Financial Technology") which
-            # breaks downstream policy lookup keyed on the slug.
-            canonical_industry = state.get("industry") or r.output.industry
-            merged = r.output.model_copy(
-                update={
-                    "industry": canonical_industry,
-                    "brand": state.get("brand") or r.output.brand,
-                    "audience": state.get("audience") or r.output.audience,
-                    "competitive_landscape": state.get("competitive_landscape")
-                    or r.output.competitive_landscape,
-                    "content_audit": state.get("content_audit") or r.output.content_audit,
-                }
-            )
-            trace = _trace(
+
+        # High-USP Premium Strategist prompt focusing on Real Business Insights
+        task_str = (
+            "Produce a HIGH-USP, ULTRA-SPECIFIC MarketingStrategy for THIS business. "
+            "Generic industry advice is a failure. Required fields:\n"
+            "  - tenant_id, business_id, industry (echo from input)\n"
+            "  - recommendations (3-7 prioritized, highly actionable items with clear metrics)\n"
+            "  - detailed_channel_strategies (MANDATORY): Provide deep-dives as a LIST of objects. "
+            "    Each object MUST have: 'channel' (the slug: 'linkedin', 'google_search', etc.), 'strategy_details' (text), "
+            "    'key_metrics' (list of strings), 'implementation_steps' (list), "
+            "    and 'citations' (list of citations). You MUST provide strategies for:\n"
+            "      * linkedin (separate strategy focused on B2B/Thought-leadership)\n"
+            "      * youtube or instagram (Social Media)\n"
+            "      * google_search or email (Search & Direct)\n"
+            "  - inclusivity_metrics (OPTIONAL): The '4 L's' (last, least, lost, lowest) should be kept strictly as "
+            "    ONE specific section of the report. Provide 'last', 'least', 'lost', 'lowest' (floats between 0.0 and 1.0) and "
+            "    'narrative' (a required 1-3 sentence string explanation of how the strategy serves or misses these segments). "
+            "    Do NOT dedicate the entire report to this; focus the rest of the strategy entirely on premium quality real business insights.\n"
+            "  - benefit_report: A detailed, multi-paragraph corporate analysis explaining business ROI, "
+            "    strategic value, competitive advantage, digital transformation, and why this specific strategy is highly beneficial for OUR company.\n"
+            "  - overall_confidence (0..1)\n"
+            "  - summary (3-5 sentence executive overview summarizing all gathered data in a boardroom-ready format)\n\n"
+            "Strategy quality bar:\n"
+            "  * All recommendations, channel strategies, and benefit reports MUST use a highly professional, "
+            "    executive-ready, corporate-standard tone suitable for immediate presentation to C-level executives "
+            "    and board members. Focus heavily on real business insights, growth levers, and market acquisition.\n"
+            "  * Proactively align all recommendations and strategies with applicable regulations and policies "
+            "    such as RBI/SEBI digital lending and investment guidelines (for financial/fintech products), "
+            "    RERA (for real estate/proptech), DPDP/GDPR (for user data privacy and protection). Ensure that any "
+            "    proposed actions are structured to prevent compliance or regulatory violations.\n"
+            "  * Every recommendation and channel strategy MUST reference a specific "
+            "    business detail lifted from the prior summaries or context.\n"
+            "  * Take special help from the LinkedIn pages and competitor mentions "
+            "    found in the retrieved context to collect data on their tactics.\n"
+            "  * Each recommendation MUST include a CUSTOMER BENEFIT target, "
+            "    explicitly addressing one of the '4 L's'.\n"
+            "  * Citations MUST use the exact 'chunk_id' (valid UUID) from the retrieved chunks. "
+            "    Do NOT invent or shorten chunk_ids.\n\n"
+            "Set `brand`, `audience`, `competitive_landscape`, `content_audit` "
+            "to null — they're merged from prior outputs after you return.\n\n"
+            f"Prior agent outputs (summarized):\n{prior}"
+        )
+
+        # Route to Llama-3.3-70B on local port 8801 if active.
+        # Fallback to Groq Llama 3.3 70B (single-call mode) if local is offline or fails.
+        # Fallback to local Qwen 14B on port 8800 only as an absolute last resort.
+        # Determine speed mode (default: general)
+        speed = state.get("speed", "general")
+        tried_configs = []
+        r = None
+        last_error = None
+
+        # Build list of options to try in sequential order depending on speed mode
+        if speed == "ultra_fast":
+            # Cloud-first: Gemini -> Groq -> Local 70B -> Local 14B
+            options = ["google_gemini", "groq_llama_3.3_70b", "local_high_tier", "local_qwen_14b_8800"]
+        else:
+            # Local-first: Local 70B -> Local 14B -> Gemini -> Groq
+            options = ["local_high_tier", "local_qwen_14b_8800", "google_gemini", "groq_llama_3.3_70b"]
+
+        for opt in options:
+            if r is not None:
+                break
+
+            # --- Option A: Local High-Tier Server (Ollama / vLLM 8801) ---
+            if opt == "local_high_tier":
+                local_high_tier_available = False
+                local_model_name = "casperhansen/llama-3.3-70b-instruct-gptq"
+                local_base_url = "http://127.0.0.1:8801/v1"
+                try:
+                    import httpx
+                    resp = httpx.get("http://127.0.0.1:8801/v1/models", timeout=1.0)
+                    if resp.status_code == 200:
+                        local_high_tier_available = True
+                        data = resp.json().get("data")
+                        if data and len(data) > 0:
+                            local_model_name = data[0]["id"]
+                except Exception:
+                    pass
+
+                if not local_high_tier_available:
+                    try:
+                        import httpx
+                        resp = httpx.get("http://127.0.0.1:11434/v1/models", timeout=1.0)
+                        if resp.status_code == 200:
+                            data = resp.json().get("data")
+                            if data:
+                                model_ids = [m["id"] for m in data]
+                                target_model = next((m for m in model_ids if "local-research-agent" in m or "llama3.3" in m), None)
+                                if target_model:
+                                    local_high_tier_available = True
+                                    local_base_url = "http://127.0.0.1:11434/v1"
+                                    local_model_name = target_model
+                    except Exception:
+                        pass
+
+                if local_high_tier_available:
+                    tried_configs.append(f"local_high_tier ({local_model_name})")
+                    log.info("nodes.strategist.attempting_local_high_tier", model=local_model_name, base_url=local_base_url)
+                    try:
+                        from bizpulse.llm.openai_compat import OpenAICompatClient
+                        from bizpulse.agents.council import Council
+                        from bizpulse.agents.runner import AgentRunner as LocalRunner
+
+                        llama_client = OpenAICompatClient(
+                            vendor="local",
+                            model=local_model_name,
+                            base_url=local_base_url,
+                            api_key_env="LLM_API_KEY",
+                            api_key="EMPTY",
+                            timeout=300.0
+                        )
+                        strategist_council = Council(
+                            members=[llama_client],
+                            judge=llama_client,
+                            rounds=1,
+                            max_tokens=4096
+                        )
+                        local_runner = LocalRunner(
+                            retrieval=runner.retrieval,
+                            council=strategist_council,
+                            industry=runner.industry
+                        )
+                        r = await local_runner.run(
+                            agent="strategist",
+                            task=task_str,
+                            output_schema=MarketingStrategy,
+                            query_text="detailed marketing strategy LinkedIn social media YouTube Instagram Facebook X Threads Google Search WhatsApp B2B Email 4L benefits real business insights executive summary",
+                            top_k=3,
+                            few_shot_examples=few_shot_examples,
+                        )
+                        log.info("nodes.strategist.local_llama_8801_success")
+                    except Exception as exc:
+                        last_error = exc
+                        log.warning("nodes.strategist.local_llama_8801_failed", error=str(exc)[:300])
+
+            # --- Option B: Local Qwen 14B on port 8800 ---
+            elif opt == "local_qwen_14b_8800":
+                tried_configs.append("local_qwen_14b_8800")
+                log.info("nodes.strategist.attempting_local_qwen_14b_8800_as_local_backup")
+                try:
+                    r = await runner.run(
+                        agent="strategist",
+                        task=task_str,
+                        output_schema=MarketingStrategy,
+                        query_text="detailed marketing strategy LinkedIn social media YouTube Instagram Facebook X Threads Google Search WhatsApp B2B Email 4L benefits real business insights executive summary",
+                        top_k=3,
+                        few_shot_examples=few_shot_examples,
+                    )
+                    log.info("nodes.strategist.local_qwen_14b_8800_success")
+                except Exception as exc:
+                    last_error = exc
+                    log.warning("nodes.strategist.local_qwen_14b_8800_failed", error=str(exc)[:300])
+
+            # --- Option C: Google Gemini (gemini-2.5-flash) Cloud API ---
+            elif opt == "google_gemini":
+                tried_configs.append("google_gemini")
+                log.info("nodes.strategist.attempting_google_gemini")
+                try:
+                    from bizpulse.llm.gemini_client import GeminiClient
+                    from bizpulse.agents.council import Council
+                    from bizpulse.agents.runner import AgentRunner as LocalRunner
+
+                    gemini_client = GeminiClient(
+                        model="gemini-2.5-flash"
+                    )
+                    strategist_council = Council(
+                        members=[gemini_client],
+                        judge=gemini_client,
+                        rounds=1,
+                        max_tokens=4096
+                    )
+                    gemini_runner = LocalRunner(
+                        retrieval=runner.retrieval,
+                        council=strategist_council,
+                        industry=runner.industry
+                    )
+                    r = await gemini_runner.run(
+                        agent="strategist",
+                        task=task_str,
+                        output_schema=MarketingStrategy,
+                        query_text="detailed marketing strategy LinkedIn social media YouTube Instagram Facebook X Threads Google Search WhatsApp B2B Email 4L benefits real business insights executive summary",
+                        top_k=3,
+                        few_shot_examples=few_shot_examples,
+                    )
+                    log.info("nodes.strategist.google_gemini_success")
+                except Exception as exc:
+                    last_error = exc
+                    log.warning("nodes.strategist.google_gemini_failed", error=str(exc)[:300])
+
+            # --- Option D: Groq Cloud API (llama-3.3-70b-versatile) ---
+            elif opt == "groq_llama_3.3_70b":
+                tried_configs.append("groq_llama_3.3_70b")
+                log.info("nodes.strategist.attempting_groq_llama_3.3_70b_as_last_resort")
+                try:
+                    from bizpulse.llm.openai_compat import OpenAICompatClient
+                    from bizpulse.agents.council import Council
+                    from bizpulse.agents.runner import AgentRunner as LocalRunner
+
+                    groq_client = OpenAICompatClient(
+                        vendor="groq",
+                        model="llama-3.3-70b-versatile",
+                        base_url="https://api.groq.com/openai/v1",
+                        api_key_env="GROQ_API_KEY"
+                    )
+                    strategist_council = Council(
+                        members=[groq_client],
+                        judge=groq_client,
+                        rounds=1,
+                        max_tokens=4096
+                    )
+                    groq_runner = LocalRunner(
+                        retrieval=runner.retrieval,
+                        council=strategist_council,
+                        industry=runner.industry
+                    )
+                    r = await groq_runner.run(
+                        agent="strategist",
+                        task=task_str,
+                        output_schema=MarketingStrategy,
+                        query_text="detailed marketing strategy LinkedIn social media YouTube Instagram Facebook X Threads Google Search WhatsApp B2B Email 4L benefits real business insights executive summary",
+                        top_k=3,
+                        few_shot_examples=few_shot_examples,
+                    )
+                    log.info("nodes.strategist.groq_llama_3.3_70b_success")
+                except Exception as exc:
+                    last_error = exc
+                    log.warning("nodes.strategist.groq_llama_3.3_70b_failed", error=str(exc)[:300])
+
+        # Handle ultimate failure
+        if r is None:
+            exc = last_error or RuntimeError("All Strategist LLM options exhausted.")
+            agent_trace = _trace(
                 agent="strategist",
                 started_ms=t0,
-                status="ok",
-                retries=1 if r.repair_attempted else 0,
+                status="failed",
+                error=str(exc)[:300],
             )
-            return _record_repair(
-                {"final_strategy": merged, "agent_traces": [trace]},
-                "strategist",
-                r.repair_attempted,
-            )
-        except AgentRunError as exc:
-            log.warning("graph.strategist.failed", error=str(exc)[:300])
             return {
                 "final_strategy": None,
                 "errors": [f"strategist: {exc}"],
-                "agent_traces": [
-                    _trace(
-                        agent="strategist",
-                        started_ms=t0,
-                        status="failed",
-                        error=str(exc)[:300],
-                    )
-                ],
+                "agent_traces": [agent_trace],
             }
+
+        canonical_industry = state.get("industry") or r.output.industry
+        merged = r.output.model_copy(
+            update={
+                "tenant_id": state["tenant_id"],
+                "business_id": state["business_id"],
+                "industry": canonical_industry,
+                "brand": state.get("brand"),
+                "audience": state.get("audience"),
+                "competitive_landscape": state.get("competitive_landscape"),
+                "content_audit": state.get("content_audit"),
+            }
+        )
+        agent_trace = _trace(
+            agent="strategist",
+            started_ms=t0,
+            status="ok",
+            retries=1 if r.repair_attempted else 0,
+            fallback_used=len(tried_configs) > 1 or getattr(r.council, "fallback_used", False),
+        )
+        return _record_repair(
+            {"final_strategy": merged, "agent_traces": [agent_trace]},
+            "strategist",
+            r.repair_attempted,
+        )
 
     return strategist
 

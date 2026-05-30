@@ -36,7 +36,7 @@ exec python3 scripts/run_vllm_patched.py \
   --model "$VLLM_MODEL" \
   --host 127.0.0.1 \
   --port 8800 \
-  --max-model-len 16384 \
+  --max-model-len 32768 \
   --gpu-memory-utilization "${GPU_MEMORY_UTILIZATION:-0.85}" \
   --enable-auto-tool-choice \
   --tool-call-parser hermes \

@@ -238,16 +238,17 @@ class InMemoryStore:
         self,
         tenant_id: TenantId,
         business_id: BusinessId,
-        run_type: Literal["marketing_strategy", "daily_research"] = "marketing_strategy",
+        run_type: str = "marketing_strategy",
         inputs: dict | None = None,
     ) -> RunRecord:
-        if tenant_id not in self._tenants:
-            raise KeyError(f"unknown tenant: {tenant_id}")
-        biz = self._businesses.get(business_id)
+        # Verify the business belongs to this tenant before writing the run.
+        biz = self.get_business(business_id)
         if biz is None:
             raise KeyError(f"unknown business: {business_id}")
         if biz.tenant_id != tenant_id:
             raise ValueError("business belongs to a different tenant")
+        import socket
+        import os
         with self._lock:
             run = RunRecord(
                 id=uuid4(),
@@ -255,6 +256,9 @@ class InMemoryStore:
                 business_id=business_id,
                 run_type=run_type,
                 inputs=inputs,
+                hostname=socket.gethostname(),
+                pid=os.getpid(),
+                last_heartbeat_at=utcnow(),
             )
             self._runs[run.id] = run
             self._runs_by_business.setdefault(business_id, []).append(run.id)
@@ -296,6 +300,32 @@ class InMemoryStore:
             self._runs[run_id] = run
             return run
 
+    def add_agent_trace(self, run_id: UUID, status: RunStatus, trace: object) -> None:
+        """Append an AgentTrace and update status in-memory."""
+        with self._lock:
+            if run_id in self._runs:
+                run = self._runs[run_id]
+                traces = list(run.agent_traces or [])
+                # Remove duplicate
+                traces = [t for t in traces if getattr(t, "agent", None) != getattr(trace, "agent", None)]
+                traces.append(trace)
+                
+                # Also put in final_output if final_output exists
+                final_output = run.final_output
+                if final_output:
+                    try:
+                        final_output = final_output.model_copy(update={"agent_traces": traces})
+                    except Exception:
+                        pass
+                
+                self._runs[run_id] = run.model_copy(
+                    update={
+                        "status": status,
+                        "agent_traces": traces,
+                        "final_output": final_output
+                    }
+                )
+
     def list_runs_for_business(self, business_id: BusinessId) -> list[RunRecord]:
         ids = self._runs_by_business.get(business_id, [])
         return [self._runs[r] for r in ids if r in self._runs]
@@ -334,26 +364,41 @@ class InMemoryStore:
 
     def fail_orphaned_runs(self) -> int:
         """Find any runs that are currently in a non-terminal state and mark them as failed."""
+        import socket
+        from datetime import timedelta
         count = 0
+        current_hostname = socket.gethostname()
+        cutoff = utcnow() - timedelta(minutes=2)
         with self._lock:
             for run_id, run in list(self._runs.items()):
-                if run.status in {
-                    "pending",
-                    "ingesting",
-                    "embedding",
-                    "analyzing",
-                    "synthesizing",
-                    "critic_review",
-                }:
-                    self._runs[run_id] = run.model_copy(
-                        update={
-                            "status": "failed",
-                            "error": "Run aborted due to server restart/reload",
-                            "finished_at": utcnow(),
-                        }
+                if run.status not in {"complete", "failed"}:
+                    is_local_zombie = run.hostname == current_hostname
+                    is_timeout_zombie = (
+                        run.last_heartbeat_at is None or run.last_heartbeat_at < cutoff
                     )
-                    count += 1
+                    if is_local_zombie or is_timeout_zombie:
+                        self._runs[run_id] = run.model_copy(
+                             update={
+                                 "status": "failed",
+                                 "error": "Run aborted due to server restart/reload",
+                                 "finished_at": utcnow(),
+                             }
+                        )
+                        count += 1
         return count
+
+    def heartbeat_run(self, run_id: UUID, hostname: str, pid: int) -> None:
+        with self._lock:
+            run = self._runs.get(run_id)
+            if run is None:
+                return
+            self._runs[run_id] = run.model_copy(
+                update={
+                    "hostname": hostname,
+                    "pid": pid,
+                    "last_heartbeat_at": utcnow(),
+                }
+            )
 
 
 # Singleton — replaced by a Postgres-backed impl in a later phase.

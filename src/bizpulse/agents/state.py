@@ -11,14 +11,18 @@ from typing import Annotated, TypedDict
 from uuid import UUID
 
 from bizpulse.models import (
+    AcademicTrackerOutput,
+    PolicyAnalystOutput,
+    MarketScoutOutput,
+    EnvironmentalMonitorOutput,
+    CompetitiveIntelligenceOutput,
+    RadarOutput,
     AudienceAnalysis,
     BrandAnalysis,
     CompetitiveLandscape,
     ContentAudit,
     DailyResearchReport,
     MarketingStrategy,
-    PolicyTrackerOutput,
-    ProjectTrackerOutput,
 )
 from bizpulse.models.agents import AgentTrace
 from bizpulse.models.compliance import ComplianceReport
@@ -33,6 +37,7 @@ class AnalysisState(TypedDict, total=False):
     """Flowing state for one BusinessAnalysis run."""
 
     # ---- inputs (set at graph entry) ----
+    run_id: UUID
     tenant_id: UUID
     business_id: UUID
     industry: str
@@ -45,6 +50,8 @@ class AnalysisState(TypedDict, total=False):
     """Successful historical strategies for the same industry to guide in-context learning."""
     run_type: str
     """Type of run: 'marketing_strategy' or 'daily_research'."""
+    speed: str
+    """Speed mode: 'general' (local-first) or 'ultra_fast' (cloud-first)."""
 
     # ---- per-agent outputs (each node fills its slot) ----
     brand: BrandAnalysis | None
@@ -53,8 +60,12 @@ class AnalysisState(TypedDict, total=False):
     content_audit: ContentAudit | None
 
     # ---- research per-agent outputs ----
-    project_tracker: ProjectTrackerOutput | None
-    policy_tracker: PolicyTrackerOutput | None
+    academic_tracker: AcademicTrackerOutput | None
+    policy_analyst: PolicyAnalystOutput | None
+    market_scout: MarketScoutOutput | None
+    environmental_monitor: EnvironmentalMonitorOutput | None
+    competitive_intelligence: CompetitiveIntelligenceOutput | None
+    radar: RadarOutput | None
 
     # ---- final synthesis ----
     final_strategy: MarketingStrategy | None

@@ -57,7 +57,14 @@ _AGENT_ROLES: dict[AgentName, str] = {
     "project_tracker": "You track domain-specific entities and metric movements/trends based on website context.",
     "policy_tracker": "You track industry-specific policy, interest rate, and regulatory updates affecting the domain.",
     "research_synthesizer": "You synthesize gathered market news and regulatory changes into a short, plain-language, non-technical daily summary.",
+    "academic_tracker": "You track the latest academic research, technical breakthroughs, or scientific innovations applicable to the industry.",
+    "policy_analyst": "You monitor and identify regulatory updates, policy shifts, tax reforms, budget allocations, subsidies, geo-political/trade updates, or interest-rate changes.",
+    "market_scout": "You identify and track strategic corporate developments, including mergers and acquisitions (M&A), funding rounds, major partnerships, investments, joint ventures, or market expansions.",
+    "environmental_monitor": "You identify environment, climate, weather, or sustainability threats and opportunities affecting this sector.",
+    "competitive_intelligence": "You identify competitor moves, pricing shifts, new product launches, and client sentiment.",
+    "radar": "You identify top miscellaneous but critical anomalies, adjacent trends, or local events.",
 }
+
 
 
 # --- builder ---------------------------------------------------------------

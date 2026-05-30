@@ -374,6 +374,10 @@
                     <span style="color:var(--bzp-ink-faint); display:block; font-size:0.72rem; text-transform:uppercase;">Council LLMs</span>
                     <strong style="color:var(--bzp-ink);" x-text="selectedRun.inputs.num_llms"></strong>
                   </div>
+                  <div x-show="selectedRun.inputs.speed" style="grid-column: span 2;">
+                    <span style="color:var(--bzp-ink-faint); display:block; font-size:0.72rem; text-transform:uppercase;">Speed Mode</span>
+                    <strong style="color:var(--bzp-ink);" x-text="selectedRun.inputs.speed === 'ultra_fast' ? '⚡ Ultra Fast (Cloud-First)' : 'General (Local-First)'"></strong>
+                  </div>
                 </div>
                 <div x-show="selectedRun.inputs.additional_context" style="margin-top:0.6rem; border-top:1px solid var(--bzp-border); padding-top:0.6rem;">
                   <span style="color:var(--bzp-ink-faint); display:block; font-size:0.72rem; text-transform:uppercase; margin-bottom:0.25rem;">Additional Context</span>

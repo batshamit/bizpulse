@@ -21,6 +21,12 @@ RunStatus = Literal[
     "critic_review",
     "complete",
     "failed",
+    "brand_analyst",
+    "audience_analyst",
+    "competitor_scout",
+    "content_auditor",
+    "strategist",
+    "compliance_checker",
 ]
 
 
@@ -48,3 +54,6 @@ class RunRecord(StrictModel):
     total_output_tokens: int = Field(default=0, ge=0)
     total_cost_usd: float = Field(default=0.0, ge=0.0)
     llm_call_count: int = Field(default=0, ge=0)
+    hostname: str | None = None
+    pid: int | None = None
+    last_heartbeat_at: datetime | None = None

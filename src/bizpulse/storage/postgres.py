@@ -223,6 +223,12 @@ class PostgresStore:
             raise ValueError("business belongs to a different tenant")
         run_id = uuid4()
         import json
+        import socket
+        import os
+
+        hostname = socket.gethostname()
+        pid = os.getpid()
+        now_str = utcnow().isoformat()
 
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
@@ -230,7 +236,18 @@ class PostgresStore:
                 "VALUES (%s, %s, %s, 'pending', %s::jsonb) "
                 "RETURNING id, tenant_id, business_id, status, started_at, finished_at, error, output, "
                 "          total_input_tokens, total_output_tokens, total_cost_usd, llm_call_count",
-                (str(run_id), str(tenant_id), str(business_id), json.dumps({"run_type": run_type, "inputs": inputs})),
+                (
+                    str(run_id),
+                    str(tenant_id),
+                    str(business_id),
+                    json.dumps({
+                        "run_type": run_type,
+                        "inputs": inputs,
+                        "hostname": hostname,
+                        "pid": pid,
+                        "last_heartbeat_at": now_str,
+                    })
+                ),
             )
             row = cur.fetchone()
             assert row is not None
@@ -273,6 +290,42 @@ class PostgresStore:
             if row is None:
                 raise KeyError(f"unknown run: {run_id}")
         return _row_to_run(row)
+
+    def add_agent_trace(self, run_id: UUID, status: RunStatus, trace: object) -> None:
+        """Append an AgentTrace to the output jsonb column in Postgres, and update the run's status in real-time."""
+        import json
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            # 1. Fetch current output
+            cur.execute("SELECT output FROM runs WHERE id = %s", (str(run_id),))
+            row = cur.fetchone()
+            if not row:
+                return
+            output = row[0] or {}
+            # Ensure it is a dict
+            if not isinstance(output, dict):
+                try:
+                    output = json.loads(output)
+                except Exception:
+                    output = {}
+            
+            # 2. Append trace
+            traces = output.setdefault("agent_traces", [])
+            # Append new trace (remove existing duplicate if present by agent name)
+            traces = [t for t in traces if t.get("agent") != trace.agent]
+            # Use model_dump_json or dict representation of Pydantic model
+            if hasattr(trace, "model_dump_json"):
+                traces.append(json.loads(trace.model_dump_json()))
+            elif hasattr(trace, "dict"):
+                traces.append(json.loads(json.dumps(trace.dict(), default=str)))
+            else:
+                traces.append(trace)
+            output["agent_traces"] = traces
+            
+            # 3. Save back
+            cur.execute(
+                "UPDATE runs SET status = %s, output = %s::jsonb WHERE id = %s",
+                (status, json.dumps(output), str(run_id))
+            )
 
     def usage_for_tenant(self, tenant_id: TenantId) -> dict[str, float | int]:
         with self._pool.connection() as conn, conn.cursor() as cur:
@@ -438,13 +491,47 @@ class PostgresStore:
 
     def fail_orphaned_runs(self) -> int:
         """Find any runs that are currently in a non-terminal state and mark them as failed."""
+        import socket
+        from datetime import timedelta
+        
+        current_hostname = socket.gethostname()
+        cutoff = utcnow() - timedelta(minutes=2)
+        cutoff_str = cutoff.isoformat()
+        
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "UPDATE runs SET status = 'failed', error = 'Run aborted due to server restart/reload', "
                 "finished_at = now() "
-                "WHERE status IN ('pending', 'ingesting', 'embedding', 'analyzing', 'synthesizing', 'critic_review')"
+                "WHERE status NOT IN ('complete', 'failed') "
+                "AND ( "
+                "    output->>'hostname' = %s "
+                "    OR output->>'last_heartbeat_at' IS NULL "
+                "    OR (output->>'last_heartbeat_at')::timestamp with time zone < %s::timestamp with time zone "
+                ")",
+                (current_hostname, cutoff_str),
             )
             return cur.rowcount
+
+    def heartbeat_run(self, run_id: UUID, hostname: str, pid: int) -> None:
+        import json
+        with self._pool.connection() as conn, conn.cursor() as cur:
+            cur.execute("SELECT output FROM runs WHERE id = %s", (str(run_id),))
+            row = cur.fetchone()
+            if not row:
+                return
+            output = row[0] or {}
+            if not isinstance(output, dict):
+                try:
+                    output = json.loads(output)
+                except Exception:
+                    output = {}
+            output["hostname"] = hostname
+            output["pid"] = pid
+            output["last_heartbeat_at"] = utcnow().isoformat()
+            cur.execute(
+                "UPDATE runs SET output = %s::jsonb WHERE id = %s",
+                (json.dumps(output), str(run_id))
+            )
 
 
 # ----- row mappers ---------------------------------------------------------
@@ -506,10 +593,22 @@ def _row_to_run(row: Iterable) -> RunRecord:
     agent_traces = []
     run_type: Literal["marketing_strategy", "daily_research"] = "marketing_strategy"
     inputs = None
+    hostname = None
+    pid = None
+    last_heartbeat_at = None
     if output is not None:
         inputs = output.get("inputs")
         val = output.get("run_type", "marketing_strategy")
         run_type = "daily_research" if val == "daily_research" else "marketing_strategy"
+        hostname = output.get("hostname")
+        pid = output.get("pid")
+        lh_str = output.get("last_heartbeat_at")
+        if lh_str:
+            from datetime import datetime
+            try:
+                last_heartbeat_at = datetime.fromisoformat(lh_str)
+            except Exception:
+                pass
         if len(output) > 1:
             try:
                 if run_type == "daily_research":
@@ -537,4 +636,7 @@ def _row_to_run(row: Iterable) -> RunRecord:
         total_output_tokens=total_output,
         total_cost_usd=total_cost,
         llm_call_count=llm_calls,
+        hostname=hostname,
+        pid=pid,
+        last_heartbeat_at=last_heartbeat_at,
     )

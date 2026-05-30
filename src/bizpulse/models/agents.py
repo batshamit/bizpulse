@@ -26,6 +26,12 @@ AgentName = Literal[
     "project_tracker",
     "policy_tracker",
     "research_synthesizer",
+    "academic_tracker",
+    "policy_analyst",
+    "market_scout",
+    "environmental_monitor",
+    "competitive_intelligence",
+    "radar",
 ]
 
 AgentStatus = Literal["ok", "retry", "failed"]

@@ -90,7 +90,7 @@ class Council:
         rounds: int = 2,
         round_temperature: float = 0.2,
         synthesis_temperature: float = 0.0,
-        max_tokens: int = 2048,
+        max_tokens: int = 4096,
     ) -> None:
         if not members:
             raise ValueError("Council needs at least one member")

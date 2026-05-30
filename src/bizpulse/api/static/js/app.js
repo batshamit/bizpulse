@@ -203,7 +203,7 @@ document.addEventListener('alpine:init', () => {
 
   Alpine.data('newReportPage', () => ({
     url: '', industry: '', country: 'IN', state: '', context: '', num_llms: '',
-    run_type: 'marketing_strategy',
+    run_type: 'marketing_strategy', speed: 'general',
     busy: false, error: '',
     INDUSTRIES: [], COUNTRIES: [], STATES: {},
     async init() {
@@ -223,7 +223,8 @@ document.addEventListener('alpine:init', () => {
         const bodyPayload = {
           country: this.country,
           state: this.state || null,
-          additional_context: this.context.trim() || null
+          additional_context: this.context.trim() || null,
+          speed: this.speed
         };
         if (this.num_llms) {
           bodyPayload.num_llms = parseInt(this.num_llms, 10);
@@ -688,12 +689,43 @@ document.addEventListener('alpine:init', () => {
       } else if (this.run.status === 'embedding') {
         basePercent = 35;
         stageText = 'Generating embeddings and storing vectors';
-      } else if (this.run.status === 'analyzing') {
+      } else if (this.run.status === 'analyzing' || [
+        'brand_analyst', 'audience_analyst', 'competitor_scout', 'content_auditor', 'strategist', 'compliance_checker',
+        'academic_tracker', 'policy_analyst', 'market_scout', 'environmental_monitor', 'competitive_intelligence', 'radar', 'research_synthesizer'
+      ].includes(this.run.status)) {
         basePercent = 55;
-        stageText = 'Executing sub-agent analysis';
+        let activeAgent = this.run.status;
+        if (activeAgent === 'analyzing') {
+          activeAgent = runType === 'daily_research' ? 'academic_tracker' : 'brand_analyst';
+        }
         
-        const completedTracesCount = this.agentTraces().filter(t => t.status === 'ok').length;
-        const totalExpectedTraces = runType === 'daily_research' ? 3 : 7;
+        const traces = this.agentTraces();
+        if (runType === 'daily_research' && traces.length > 0) {
+          const latest = traces[traces.length - 1];
+          activeAgent = latest.agent;
+        }
+
+        const agentLabels = {
+          brand_analyst: 'Executing Brand Analyst — investigating brand identity & value props',
+          audience_analyst: 'Executing Audience Analyst — designing target personas & ICP mapping',
+          competitor_scout: 'Executing Competitor Scout — mapping competitor tactics & landscape',
+          content_auditor: 'Executing Content Auditor — auditing site content quality & compliance',
+          strategist: 'Executing Strategist — synthesizing core marketing strategy & ROI',
+          compliance_checker: 'Executing Compliance Checker — audit & regulatory certification',
+          
+          academic_tracker: 'Executing sub-agent analysis: The Academic (Worker 1) — scholarly breakthroughs',
+          policy_analyst: 'Executing sub-agent analysis: The Policy Analyst (Worker 2) — regulations & budget',
+          market_scout: 'Executing sub-agent analysis: The Market Scout (Worker 3) — business M&A & funding',
+          environmental_monitor: 'Executing sub-agent analysis: Environmental Monitor (Worker 4) — climate risks',
+          competitive_intelligence: 'Executing sub-agent analysis: Competitive Intelligence (Worker 5) — launches & sentiment',
+          radar: 'Executing sub-agent analysis: The Radar Agent (Worker 6) — anomalies & emerging signals',
+          research_synthesizer: 'Research Synthesizer — compiling unified intelligence brief'
+        };
+        
+        stageText = agentLabels[activeAgent] || 'Executing sub-agent analysis';
+        
+        const completedTracesCount = traces.filter(t => t.status === 'ok').length;
+        const totalExpectedTraces = runType === 'daily_research' ? 7 : 7;
         const traceWeight = 30 / totalExpectedTraces;
         basePercent += Math.min(30, Math.round(completedTracesCount * traceWeight));
       } else if (['synthesizing', 'critic_review'].includes(this.run.status)) {

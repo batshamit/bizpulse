@@ -41,7 +41,17 @@ from bizpulse.models.ingest import (
     RawArtifact,
     SourceType,
 )
-from bizpulse.models.research import DailyResearchReport, PolicyTrackerOutput, ProjectTrackerOutput
+from bizpulse.models.research import (
+    AcademicPaper,
+    AcademicTrackerOutput,
+    BusinessDeal,
+    DailyResearchReport,
+    EnvironmentalMonitorOutput,
+    MarketScoutOutput,
+    PolicyAnalystOutput,
+    CompetitiveIntelligenceOutput,
+    RadarOutput,
+)
 from bizpulse.models.retrieval import (
     RetrievalMethod,
     RetrievalQuery,
@@ -90,9 +100,13 @@ __all__ = [
     "IndustryOntology",
     "IndustryPack",
     "MarketingStrategy",
-    "PolicyTrackerOutput",
+    "AcademicTrackerOutput",
+    "PolicyAnalystOutput",
+    "MarketScoutOutput",
+    "EnvironmentalMonitorOutput",
+    "CompetitiveIntelligenceOutput",
+    "RadarOutput",
     "Priority",
-    "ProjectTrackerOutput",
     "RawArtifact",
     "Recommendation",
     "RetrievalMethod",

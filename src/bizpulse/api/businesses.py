@@ -73,6 +73,9 @@ class AnalyzeRequest(BaseModel):
     run_type: Literal["marketing_strategy", "daily_research"] = Field(
         default="marketing_strategy", description="Type of analysis pipeline to run."
     )
+    speed: Literal["general", "ultra_fast"] = Field(
+        default="general", description="Speed mode: general (local-first) or ultra_fast (cloud-first)."
+    )
 
 
 @router.post(
@@ -102,6 +105,7 @@ def analyze(
     state = body.state if body else None
     context = body.additional_context if body else None
     num_llms = body.num_llms if body else None
+    speed = body.speed if body else "general"
     run = store.create_run(
         tenant.id,
         business_id,
@@ -111,6 +115,7 @@ def analyze(
             "state": state,
             "additional_context": context,
             "num_llms": num_llms,
+            "speed": speed,
         },
     )
     bg.add_task(
@@ -122,6 +127,7 @@ def analyze(
         additional_context=context,
         num_llms=num_llms,
         run_type=run_type,
+        speed=speed,
     )
     return run
 

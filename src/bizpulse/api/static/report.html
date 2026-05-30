@@ -106,6 +106,10 @@
               <strong style="color:var(--bzp-ink-soft);">Council LLMs:</strong>
               <span x-text="run.inputs.num_llms" style="color:var(--bzp-ink);"></span>
             </div>
+            <div x-show="run.inputs.speed">
+              <strong style="color:var(--bzp-ink-soft);">Speed Mode:</strong>
+              <span x-text="run.inputs.speed === 'ultra_fast' ? '⚡ Ultra Fast (Cloud-First)' : 'General (Local-First)'" style="color:var(--bzp-ink); font-weight:600;"></span>
+            </div>
             <div x-show="run.inputs.additional_context" style="grid-column:1 / -1;">
               <strong style="color:var(--bzp-ink-soft); display:block; margin-bottom:0.25rem;">Additional Tenant Context:</strong>
               <div style="background:var(--bzp-cream); border:1px solid var(--bzp-border); padding:0.6rem 0.8rem; border-radius:var(--bzp-radius); color:var(--bzp-ink-soft); font-family:var(--bzp-font-serif); line-height:1.4;" x-text="run.inputs.additional_context"></div>
@@ -116,13 +120,13 @@
 
       <!-- Tabs -->
       <div style="display:flex; gap:0.4rem; border-bottom:1px solid var(--bzp-border); margin-bottom:1.5rem;">
-        <template x-for="tab in (run.run_type === 'daily_research' ? ['summary', 'agents', 'raw'] : ['strategy', 'compliance', 'agents', 'raw'])" :key="tab">
+        <template x-for="tab in (run.run_type === 'daily_research' ? ['summary', 'agents', 'raw'] : (run.final_output && run.final_output.research_and_innovation ? ['strategy', 'market_insights', 'compliance', 'agents', 'raw'] : ['strategy', 'compliance', 'agents', 'raw']))" :key="tab">
           <button @click="activeTab=tab"
                   :style="activeTab===tab
                     ? 'border-bottom:2px solid var(--bzp-accent); color:var(--bzp-accent); font-weight:500;'
                     : 'color:var(--bzp-ink-soft);'"
                   style="background:none; border:none; padding:0.7rem 1rem; cursor:pointer; font-size:0.95rem;"
-                  x-text="tab.charAt(0).toUpperCase() + tab.slice(1)"></button>
+                  x-text="tab === 'market_insights' ? 'Market Insights' : (tab.charAt(0).toUpperCase() + tab.slice(1))"></button>
         </template>
       </div>
 
@@ -152,7 +156,7 @@
                 
                 <!-- Progress Bar container -->
                 <div style="width: 100%; max-width: 500px; height: 10px; background: var(--bzp-border); border-radius: 10px; margin: 0 auto 2rem; overflow: hidden; position: relative; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);">
-                  <div :style="`width: ${progressState().percent}%`" style="height: 100%; background: linear-gradient(90deg, var(--bzp-accent), #e28e6c); border-radius: 10px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 8px var(--bzp-accent);"></div>
+                  <div :style="'width: ' + progressState().percent + '%'" style="height: 100%; background: var(--bzp-accent); border-radius: 10px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 8px var(--bzp-accent);"></div>
                 </div>
 
                 <div style="font-size: 0.85rem; color: var(--bzp-ink-faint); margin-bottom: 1rem;">
@@ -263,7 +267,7 @@
                 
                 <!-- Progress Bar container -->
                 <div style="width: 100%; max-width: 500px; height: 10px; background: var(--bzp-border); border-radius: 10px; margin: 0 auto 2rem; overflow: hidden; position: relative; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);">
-                  <div :style="`width: ${progressState().percent}%`" style="height: 100%; background: linear-gradient(90deg, var(--bzp-accent), #e28e6c); border-radius: 10px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 8px var(--bzp-accent);"></div>
+                  <div :style="'width: ' + progressState().percent + '%'" style="height: 100%; background: var(--bzp-accent); border-radius: 10px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 8px var(--bzp-accent);"></div>
                 </div>
 
                 <div style="font-size: 0.85rem; color: var(--bzp-ink-faint); margin-bottom: 1rem;">
@@ -387,6 +391,208 @@
               </template>
             </div>
 
+          </div>
+        </template>
+      </div>
+
+      <!-- Market Insights tab (Bridged Daily Research) -->
+      <div x-show="activeTab === 'market_insights'">
+        <template x-if="run.final_output">
+          <div>
+            <!-- Header Board-Ready Actionable Brief -->
+            <div class="bzp-card" style="margin-bottom:1.5rem; border-left: 4px solid var(--bzp-accent); background: linear-gradient(135deg, #ffffff 0%, var(--bzp-cream) 100%); padding: 1.5rem;">
+              <h2 style="margin:0 0 0.8rem; font-size:1.25rem; font-weight:700; color:var(--bzp-ink); display:flex; align-items:center; gap:0.5rem;">
+                <span style="font-size:1.5rem;">🎯</span> Unified Executive Market Brief
+              </h2>
+              <p style="font-size:0.95rem; line-height:1.5; color:var(--bzp-ink); margin-bottom:1rem;" x-text="run.final_output.summary"></p>
+              
+              <div style="border-top:1px solid var(--bzp-border); padding-top:1rem; margin-top:1rem;">
+                <h4 style="margin:0 0 0.6rem; font-size:0.95rem; font-weight:600; color:var(--bzp-ink-soft); text-transform:uppercase; letter-spacing:0.05em;">⚡ Board-Ready Actionable Recommendations</h4>
+                <ul style="margin:0; padding-left:1.2rem; font-size:0.92rem; line-height:1.6; color:var(--bzp-ink);">
+                  <template x-for="rec in run.final_output.recommendations?.slice(0, 3)" :key="rec.action">
+                    <li style="margin-bottom:0.5rem;">
+                      <strong style="color:var(--bzp-accent);" x-text="rec.channel.toUpperCase() + ':'"></strong> 
+                      <span x-text="rec.action"></span>
+                      <em style="display:block; font-size:0.82rem; color:var(--bzp-ink-soft); margin-top:0.1rem;" x-text="'Rationale: ' + rec.rationale"></em>
+                    </li>
+                  </template>
+                </ul>
+              </div>
+            </div>
+
+            <!-- 6 Domains Grid -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:1.5rem; margin-bottom:1.5rem;">
+              
+              <!-- Domain 1: Academic Research & Innovations -->
+              <div class="bzp-card" style="padding:1.25rem;">
+                <h3 style="margin:0 0 1rem; font-size:1.05rem; font-weight:700; color:var(--bzp-accent); display:flex; align-items:center; gap:0.4rem; border-bottom: 2px solid var(--bzp-cream); padding-bottom: 0.5rem;">
+                  🔬 Academic Research & Innovation
+                </h3>
+                <template x-if="run.final_output.research_and_innovation && run.final_output.research_and_innovation.length > 0">
+                  <div style="display:flex; flex-direction:column; gap:1rem;">
+                    <template x-for="item in run.final_output.research_and_innovation" :key="item.title">
+                      <div style="border-bottom:1px dashed var(--bzp-border); padding-bottom:0.8rem; margin-bottom:0.2rem;">
+                        <h4 style="margin:0 0 0.3rem; font-size:0.92rem; font-weight:600; color:var(--bzp-ink);" x-text="item.title"></h4>
+                        <p style="margin:0 0 0.4rem; font-size:0.85rem; color:var(--bzp-ink-soft); line-height:1.4;" x-text="item.key_findings"></p>
+                        <div style="background:var(--bzp-cream); padding:0.4rem 0.6rem; border-radius:var(--bzp-radius); font-size:0.82rem; color:var(--bzp-ink);">
+                          <strong style="color:var(--bzp-accent);">Impact:</strong> <span x-text="item.business_application"></span>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+                <template x-if="!run.final_output.research_and_innovation || run.final_output.research_and_innovation.length === 0">
+                  <div style="color:var(--bzp-ink-soft); font-size:0.88rem; font-style:italic;">No recent academic research gathered in local context.</div>
+                </template>
+              </div>
+
+              <!-- Domain 2: Policy & Regulatory Updates -->
+              <div class="bzp-card" style="padding:1.25rem;">
+                <h3 style="margin:0 0 1rem; font-size:1.05rem; font-weight:700; color:var(--bzp-accent); display:flex; align-items:center; gap:0.4rem; border-bottom: 2px solid var(--bzp-cream); padding-bottom: 0.5rem;">
+                  ⚖️ Policy, Regulatory & Geopolitics
+                </h3>
+                <template x-if="run.final_output.policy_and_politics">
+                  <div style="display:flex; flex-direction:column; gap:0.8rem; font-size:0.88rem;">
+                    <!-- Regulatory -->
+                    <div x-show="run.final_output.policy_and_politics.regulatory?.length > 0">
+                      <strong style="color:var(--bzp-ink); font-size:0.85rem; text-transform:uppercase; letter-spacing:0.02em;">Regulatory Updates</strong>
+                      <ul style="margin:0.2rem 0 0.6rem; padding-left:1.1rem; line-height:1.4; color:var(--bzp-ink-soft);">
+                        <template x-for="reg in run.final_output.policy_and_politics.regulatory" :key="reg">
+                          <li x-text="reg" style="margin-bottom:0.25rem;"></li>
+                        </template>
+                      </ul>
+                    </div>
+                    <!-- Financial -->
+                    <div x-show="run.final_output.policy_and_politics.financial?.length > 0">
+                      <strong style="color:var(--bzp-ink); font-size:0.85rem; text-transform:uppercase; letter-spacing:0.02em;">Financial & Budgets</strong>
+                      <ul style="margin:0.2rem 0 0.6rem; padding-left:1.1rem; line-height:1.4; color:var(--bzp-ink-soft);">
+                        <template x-for="fin in run.final_output.policy_and_politics.financial" :key="fin">
+                          <li x-text="fin" style="margin-bottom:0.25rem;"></li>
+                        </template>
+                      </ul>
+                    </div>
+                    <!-- Geopolitical -->
+                    <div x-show="run.final_output.policy_and_politics.geopolitical?.length > 0">
+                      <strong style="color:var(--bzp-ink); font-size:0.85rem; text-transform:uppercase; letter-spacing:0.02em;">Geopolitics & Trade</strong>
+                      <ul style="margin:0.2rem 0; padding-left:1.1rem; line-height:1.4; color:var(--bzp-ink-soft);">
+                        <template x-for="geo in run.final_output.policy_and_politics.geopolitical" :key="geo">
+                          <li x-text="geo" style="margin-bottom:0.25rem;"></li>
+                        </template>
+                      </ul>
+                    </div>
+                  </div>
+                </template>
+                <template x-if="!run.final_output.policy_and_politics">
+                  <div style="color:var(--bzp-ink-soft); font-size:0.88rem; font-style:italic;">No policy updates detected.</div>
+                </template>
+              </div>
+
+              <!-- Domain 3: Market Scout Business Deals -->
+              <div class="bzp-card" style="padding:1.25rem;">
+                <h3 style="margin:0 0 1rem; font-size:1.05rem; font-weight:700; color:var(--bzp-accent); display:flex; align-items:center; gap:0.4rem; border-bottom: 2px solid var(--bzp-cream); padding-bottom: 0.5rem;">
+                  💼 Corporate Deals & Market Expansions
+                </h3>
+                <template x-if="run.final_output.business_deals && run.final_output.business_deals.length > 0">
+                  <div style="display:flex; flex-direction:column; gap:0.8rem;">
+                    <template x-for="deal in run.final_output.business_deals" :key="deal.entities">
+                      <div style="background:var(--bzp-cream); border-left:3px solid var(--bzp-accent); padding:0.6rem 0.8rem; border-radius:var(--bzp-radius); margin-bottom:0.4rem;">
+                        <strong style="font-size:0.88rem; color:var(--bzp-ink);" x-text="deal.entities"></strong>
+                        <p style="margin:0.2rem 0 0; font-size:0.82rem; color:var(--bzp-ink-soft); line-height:1.4;" x-text="deal.strategic_impact"></p>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+                <template x-if="!run.final_output.business_deals || run.final_output.business_deals.length === 0">
+                  <div style="color:var(--bzp-ink-soft); font-size:0.88rem; font-style:italic;">No corporate partnerships or M&A deals found.</div>
+                </template>
+              </div>
+
+              <!-- Domain 4: Environmental & Climate Monitor -->
+              <div class="bzp-card" style="padding:1.25rem;">
+                <h3 style="margin:0 0 1rem; font-size:1.05rem; font-weight:700; color:var(--bzp-accent); display:flex; align-items:center; gap:0.4rem; border-bottom: 2px solid var(--bzp-cream); padding-bottom: 0.5rem;">
+                  🌱 Climate Threat & ESG Matrix
+                </h3>
+                <template x-if="run.final_output.climate_and_weather">
+                  <div style="display:flex; flex-direction:column; gap:0.8rem; font-size:0.88rem;">
+                    <div x-show="run.final_output.climate_and_weather.threats?.length > 0">
+                      <strong style="color:var(--bzp-danger); font-size:0.85rem; text-transform:uppercase; letter-spacing:0.02em;">⚠️ Climate & Operational Threats</strong>
+                      <ul style="margin:0.2rem 0 0.6rem; padding-left:1.1rem; line-height:1.4; color:var(--bzp-ink-soft);">
+                        <template x-for="t in run.final_output.climate_and_weather.threats" :key="t">
+                          <li x-text="t" style="margin-bottom:0.25rem;"></li>
+                        </template>
+                      </ul>
+                    </div>
+                    <div x-show="run.final_output.climate_and_weather.opportunities?.length > 0">
+                      <strong style="color:var(--bzp-success); font-size:0.85rem; text-transform:uppercase; letter-spacing:0.02em;">🍀 Sustainability Opportunities</strong>
+                      <ul style="margin:0.2rem 0; padding-left:1.1rem; line-height:1.4; color:var(--bzp-ink-soft);">
+                        <template x-for="o in run.final_output.climate_and_weather.opportunities" :key="o">
+                          <li x-text="o" style="margin-bottom:0.25rem;"></li>
+                        </template>
+                      </ul>
+                    </div>
+                  </div>
+                </template>
+                <template x-if="!run.final_output.climate_and_weather">
+                  <div style="color:var(--bzp-ink-soft); font-size:0.88rem; font-style:italic;">No environmental factors detected.</div>
+                </template>
+              </div>
+
+              <!-- Domain 5: Competitor Product Shifts -->
+              <div class="bzp-card" style="padding:1.25rem;">
+                <h3 style="margin:0 0 1rem; font-size:1.05rem; font-weight:700; color:var(--bzp-accent); display:flex; align-items:center; gap:0.4rem; border-bottom: 2px solid var(--bzp-cream); padding-bottom: 0.5rem;">
+                  🛡️ Competitor Moves & Sentiment
+                </h3>
+                <template x-if="run.final_output.competitors_and_products">
+                  <div style="display:flex; flex-direction:column; gap:0.8rem; font-size:0.88rem;">
+                    <div x-show="run.final_output.competitors_and_products.new_products?.length > 0">
+                      <strong style="color:var(--bzp-ink); font-size:0.85rem;">New Product Features:</strong>
+                      <ul style="margin:0.2rem 0 0.5rem; padding-left:1.1rem; line-height:1.4; color:var(--bzp-ink-soft);">
+                        <template x-for="np in run.final_output.competitors_and_products.new_products" :key="np">
+                          <li x-text="np" style="margin-bottom:0.25rem;"></li>
+                        </template>
+                      </ul>
+                    </div>
+                    <div x-show="run.final_output.competitors_and_products.competitor_moves?.length > 0">
+                      <strong style="color:var(--bzp-ink); font-size:0.85rem;">Competitor Pivots:</strong>
+                      <ul style="margin:0.2rem 0 0.5rem; padding-left:1.1rem; line-height:1.4; color:var(--bzp-ink-soft);">
+                        <template x-for="m in run.final_output.competitors_and_products.competitor_moves" :key="m">
+                          <li x-text="m" style="margin-bottom:0.25rem;"></li>
+                        </template>
+                      </ul>
+                    </div>
+                    <div x-show="run.final_output.competitors_and_products.client_sentiment?.length > 0">
+                      <strong style="color:var(--bzp-ink); font-size:0.85rem;">Market Demand & Reviews:</strong>
+                      <ul style="margin:0.2rem 0; padding-left:1.1rem; line-height:1.4; color:var(--bzp-ink-soft);">
+                        <template x-for="s in run.final_output.competitors_and_products.client_sentiment" :key="s">
+                          <li x-text="s" style="margin-bottom:0.25rem;"></li>
+                        </template>
+                      </ul>
+                    </div>
+                  </div>
+                </template>
+                <template x-if="!run.final_output.competitors_and_products">
+                  <div style="color:var(--bzp-ink-soft); font-size:0.88rem; font-style:italic;">No competitor sentiment tracked.</div>
+                </template>
+              </div>
+
+              <!-- Domain 6: Emerging Radar Trends -->
+              <div class="bzp-card" style="padding:1.25rem;">
+                <h3 style="margin:0 0 1rem; font-size:1.05rem; font-weight:700; color:var(--bzp-accent); display:flex; align-items:center; gap:0.4rem; border-bottom: 2px solid var(--bzp-cream); padding-bottom: 0.5rem;">
+                  📡 Emerging Radar & Anomalies
+                </h3>
+                <template x-if="run.final_output.emerging_radar && run.final_output.emerging_radar.length > 0">
+                  <ul style="margin:0; padding-left:1.2rem; font-size:0.88rem; line-height:1.5; color:var(--bzp-ink-soft);">
+                    <template x-for="item in run.final_output.emerging_radar" :key="item">
+                      <li style="margin-bottom:0.4rem;" x-text="item"></li>
+                    </template>
+                  </ul>
+                </template>
+                <template x-if="!run.final_output.emerging_radar || run.final_output.emerging_radar.length === 0">
+                  <div style="color:var(--bzp-ink-soft); font-size:0.88rem; font-style:italic;">No adjacent anomalies detected.</div>
+                </template>
+              </div>
+
+            </div>
           </div>
         </template>
       </div>

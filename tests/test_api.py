@@ -293,13 +293,50 @@ def test_downloads_and_chat_endpoints() -> None:
         run_dr = store.create_run(UUID(tenant_a["id"]), UUID(biz["id"]), run_type="daily_research")
         run_dr_id = run_dr.id
 
+        from bizpulse.models import (
+            AcademicPaper,
+            PolicyAnalystOutput,
+            BusinessDeal,
+            EnvironmentalMonitorOutput,
+            CompetitiveIntelligenceOutput,
+        )
+
         dr_report = DailyResearchReport(
             tenant_id=UUID(tenant_a["id"]),
             business_id=UUID(biz["id"]),
             industry="fintech",
             most_important_update="This is a test critical update.",
-            market_and_entities=["Launch of Product X", "Price changes in Mumbai"],
-            policy_and_news=["RBI policy changes", "Taxes updated"],
+            academic_research=[
+                AcademicPaper(
+                    title="Smart Fintech AI Paper",
+                    key_findings="AI improves transaction routing.",
+                    business_application="Deploy router.",
+                )
+            ],
+            policy_and_politics=PolicyAnalystOutput(
+                regulatory=["RBI policy changes"],
+                financial=["Taxes updated"],
+                geopolitical=[],
+                citations=[Citation(chunk_id=cid, quote="Test quote", confidence=0.9)],
+            ),
+            business_deals=[
+                BusinessDeal(
+                    entities="Fintech Corp & Bank",
+                    strategic_impact="Expanded dealer network.",
+                )
+            ],
+            climate_and_weather=EnvironmentalMonitorOutput(
+                threats=[],
+                opportunities=["Green data centers reduce carbon footprint."],
+                citations=[],
+            ),
+            competitors_and_products=CompetitiveIntelligenceOutput(
+                new_products=["Launch of Product X"],
+                competitor_moves=["Competitor Y pivot."],
+                client_sentiment=[],
+                citations=[],
+            ),
+            emerging_radar=["Adjacent sector growth anomaly."],
             uncertainty_log=["Uncertain price changes"],
             overall_confidence=0.95,
             citations=[Citation(chunk_id=cid, quote="Test quote", confidence=0.9)],

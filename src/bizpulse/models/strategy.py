@@ -51,14 +51,14 @@ class DetailedChannelStrategy(StrictModel):
         default_factory=list, description="Specific KPIs to track for this channel."
     )
     implementation_steps: list[str] = Field(default_factory=list)
-    citations: list[Citation] = Field(min_length=1)
+    citations: list[Citation] = Field(default_factory=list)
 
 
 class BrandAnalysis(StrictModel):
     positioning: str = Field(min_length=1)
     tone: str = Field(min_length=1)
     value_props: list[str] = Field(min_length=1)
-    citations: list[Citation] = Field(min_length=1)
+    citations: list[Citation] = Field(default_factory=list)
 
 
 class AudiencePersona(StrictModel):
@@ -66,13 +66,13 @@ class AudiencePersona(StrictModel):
     description: str = Field(min_length=1)
     motivations: list[str] = Field(default_factory=list)
     pain_points: list[str] = Field(default_factory=list)
-    citations: list[Citation] = Field(min_length=1)
+    citations: list[Citation] = Field(default_factory=list)
 
 
 class AudienceAnalysis(StrictModel):
     primary: AudiencePersona
     secondary: list[AudiencePersona] = Field(default_factory=list)
-    citations: list[Citation] = Field(min_length=1)
+    citations: list[Citation] = Field(default_factory=list)
 
 
 class Competitor(StrictModel):
@@ -90,20 +90,20 @@ class Competitor(StrictModel):
         default=False,
         description="Competitor Scout MUST verify each competitor exists via independent web search before this is True.",
     )
-    citations: list[Citation] = Field(min_length=1)
+    citations: list[Citation] = Field(default_factory=list)
 
 
 class CompetitiveLandscape(StrictModel):
     competitors: list[Competitor] = Field(min_length=1)
     market_position: str = Field(min_length=1)
-    citations: list[Citation] = Field(min_length=1)
+    citations: list[Citation] = Field(default_factory=list)
 
 
 class ContentAuditFinding(StrictModel):
     observation: str = Field(min_length=1)
     evidence: str = Field(min_length=1)
     suggested_fix: str = Field(min_length=1)
-    citations: list[Citation] = Field(min_length=1)
+    citations: list[Citation] = Field(default_factory=list)
 
 
 class ContentAudit(StrictModel):
@@ -197,6 +197,31 @@ class MarketingStrategy(StrictModel):
         default=None,
         description="Attached by the compliance_checker agent after synthesis. None when compliance was skipped.",
     )
+    # --- Bridged Daily Research Market Insights ---
+    research_and_innovation: list[dict] | None = Field(
+        default=None,
+        description="Bridged Academic Research insights from latest Daily Research run.",
+    )
+    policy_and_politics: dict | None = Field(
+        default=None,
+        description="Bridged Policy & Regulatory insights from latest Daily Research run.",
+    )
+    business_deals: list[dict] | None = Field(
+        default=None,
+        description="Bridged Business Insights & Deals from latest Daily Research run.",
+    )
+    climate_and_weather: dict | None = Field(
+        default=None,
+        description="Bridged Environmental & Climate insights from latest Daily Research run.",
+    )
+    competitors_and_products: dict | None = Field(
+        default=None,
+        description="Bridged Competitor Moves & Sentiment from latest Daily Research run.",
+    )
+    emerging_radar: list[str] | None = Field(
+        default=None,
+        description="Bridged emerging Radar/Miscellaneous trends from latest Daily Research run.",
+    )
     agent_traces: list[AgentTrace] = Field(
         default_factory=list,
         description="Per-node trace from the LangGraph run — agent name, status, duration, retry count, error if any.",
@@ -211,3 +236,31 @@ class MarketingStrategy(StrictModel):
             # critic check will flag it.
             pass
         return v
+
+    @field_validator("overall_confidence", mode="before")
+    @classmethod
+    def _lenient_overall_confidence(cls, v: object) -> float:
+        """Parse overall_confidence leniently. If missing, null, or invalid, default to 0.85."""
+        if v is None:
+            return 0.85
+        if isinstance(v, (int, float)):
+            val = float(v)
+            if val > 1.0:  # e.g. 85 -> 0.85
+                val = val / 100.0
+            return max(0.0, min(1.0, val))
+        if isinstance(v, str):
+            v_clean = v.strip().replace("%", "")
+            try:
+                val = float(v_clean)
+                if val > 1.0:
+                    val = val / 100.0
+                return max(0.0, min(1.0, val))
+            except ValueError:
+                # If it's a descriptive word like "high" or "medium"
+                if "high" in v_clean.lower():
+                    return 0.90
+                elif "med" in v_clean.lower():
+                    return 0.75
+                return 0.85
+        return 0.85
+

@@ -9,6 +9,8 @@ build step). `/` redirects to it; the JSON service info moves to `/api`.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -33,10 +35,22 @@ log = get_logger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
+async def _cleanup_loop(store) -> None:
+    while True:
+        try:
+            count = store.fail_orphaned_runs()
+            if count > 0:
+                log.info("bizpulse.api.periodic_cleanup_orphaned_runs", count=count)
+        except Exception as exc:
+            log.warning("bizpulse.api.periodic_cleanup_orphaned_runs.failed", error=str(exc))
+        await asyncio.sleep(60.0)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     configure(settings.log_level)
     log.info("bizpulse.api.start", version=__version__, env=settings.env)
+    store = None
     try:
         from bizpulse.storage import get_default_store
 
@@ -46,7 +60,18 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             log.info("bizpulse.api.cleanup_orphaned_runs", count=count)
     except Exception as exc:
         log.warning("bizpulse.api.cleanup_orphaned_runs.failed", error=str(exc))
+        
+    cleanup_task = None
+    if store is not None:
+        cleanup_task = asyncio.create_task(_cleanup_loop(store))
+        
     yield
+    
+    if cleanup_task is not None:
+        cleanup_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await cleanup_task
+            
     log.info("bizpulse.api.stop")
 
 

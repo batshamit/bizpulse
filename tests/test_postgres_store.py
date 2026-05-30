@@ -110,6 +110,10 @@ def test_fail_orphaned_runs(store: PostgresStore) -> None:
     # Change run1 to analyzing
     store.update_run_status(run1.id, "analyzing")
 
+    # Manually backdate the started_at timestamp in the DB to exceed the 1 hour threshold
+    with store._pool.connection() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE runs SET started_at = now() - interval '2 hours' WHERE id = %s", (run1.id,))
+
     # Run cleanup
     count = store.fail_orphaned_runs()
     assert count >= 1

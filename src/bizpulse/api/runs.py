@@ -118,31 +118,116 @@ def download_pdf(
         pdf.multi_cell(0, 6, s.most_important_update)
         pdf.ln(8)
 
-        # Market & Locality Updates
+        # Academic & Technological Innovations
         pdf.set_font("helvetica", "B", 12)
-        pdf.cell(0, 8, "Market & Key Local Updates", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 8, "Academic & Technological Innovations", new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("helvetica", "", 10)
-        if s.market_and_entities:
-            for item in s.market_and_entities:
-                pdf.multi_cell(0, 6, f"- {item}")
+        if s.academic_research:
+            for paper in s.academic_research:
+                pdf.multi_cell(0, 6, f"- {paper.title}\n  Key Findings: {paper.key_findings}\n  Application: {paper.business_application}")
                 pdf.ln(1)
         else:
             pdf.set_font("helvetica", "I", 10)
-            pdf.cell(0, 6, "No market updates reported.", new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(0, 6, "No academic research reported.", new_x="LMARGIN", new_y="NEXT")
             pdf.set_font("helvetica", "", 10)
         pdf.ln(5)
 
-        # Policy & Regulations
+        # Policy, Regulations & Budget Updates
         pdf.set_font("helvetica", "B", 12)
-        pdf.cell(0, 8, "Policy & Regulations Updates", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 8, "Regulatory, Policy & Geopolitical Updates", new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("helvetica", "", 10)
-        if s.policy_and_news:
-            for item in s.policy_and_news:
+        pol = s.policy_and_politics
+        has_pol = bool(pol.regulatory or pol.financial or pol.geopolitical)
+        if has_pol:
+            if pol.regulatory:
+                for item in pol.regulatory:
+                    pdf.multi_cell(0, 6, f"- Regulatory: {item}")
+                    pdf.ln(1)
+            if pol.financial:
+                for item in pol.financial:
+                    pdf.multi_cell(0, 6, f"- Financial/Budget: {item}")
+                    pdf.ln(1)
+            if pol.geopolitical:
+                for item in pol.geopolitical:
+                    pdf.multi_cell(0, 6, f"- Geopolitical/Trade: {item}")
+                    pdf.ln(1)
+        else:
+            pdf.set_font("helvetica", "I", 10)
+            pdf.cell(0, 6, "No policy or regulatory updates reported.", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("helvetica", "", 10)
+        pdf.ln(5)
+
+        # Strategic Business Deals & Investments
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(0, 8, "Strategic Corporate Deals & Partnerships", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("helvetica", "", 10)
+        if s.business_deals:
+            for deal in s.business_deals:
+                pdf.multi_cell(0, 6, f"- {deal.entities}\n  Strategic Impact: {deal.strategic_impact}")
+                pdf.ln(1)
+        else:
+            pdf.set_font("helvetica", "I", 10)
+            pdf.cell(0, 6, "No strategic business deals reported.", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("helvetica", "", 10)
+        pdf.ln(5)
+
+        # Environmental & Climate Matrix
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(0, 8, "Environmental & Climate Risk Matrix", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("helvetica", "", 10)
+        cli = s.climate_and_weather
+        has_cli = bool(cli.threats or cli.opportunities)
+        if has_cli:
+            if cli.threats:
+                for t in cli.threats:
+                    pdf.multi_cell(0, 6, f"- Threat: {t}")
+                    pdf.ln(1)
+            if cli.opportunities:
+                for o in cli.opportunities:
+                    pdf.multi_cell(0, 6, f"- Opportunity: {o}")
+                    pdf.ln(1)
+        else:
+            pdf.set_font("helvetica", "I", 10)
+            pdf.cell(0, 6, "No environmental or climate updates reported.", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("helvetica", "", 10)
+        pdf.ln(5)
+
+        # Competitor Intelligence & Sentiment
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(0, 8, "Competitor Intelligence & Sentiment", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("helvetica", "", 10)
+        comp = s.competitors_and_products
+        has_comp = bool(comp.new_products or comp.competitor_moves or comp.client_sentiment)
+        if has_comp:
+            if comp.new_products:
+                for np in comp.new_products:
+                    pdf.multi_cell(0, 6, f"- New Product: {np}")
+                    pdf.ln(1)
+            if comp.competitor_moves:
+                for m in comp.competitor_moves:
+                    pdf.multi_cell(0, 6, f"- Competitor Move: {m}")
+                    pdf.ln(1)
+            if comp.client_sentiment:
+                for cs in comp.client_sentiment:
+                    pdf.multi_cell(0, 6, f"- Client Sentiment/Demand: {cs}")
+                    pdf.ln(1)
+        else:
+            pdf.set_font("helvetica", "I", 10)
+            pdf.cell(0, 6, "No competitor updates reported.", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("helvetica", "", 10)
+        pdf.ln(5)
+
+        # Emerging Radar Anomaly Signals
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(0, 8, "Emerging Radar Anomaly Signals", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("helvetica", "", 10)
+        if s.emerging_radar:
+            for item in s.emerging_radar:
                 pdf.multi_cell(0, 6, f"- {item}")
                 pdf.ln(1)
         else:
             pdf.set_font("helvetica", "I", 10)
-            pdf.cell(0, 6, "No policy or regulation updates reported.", new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(0, 6, "No emerging radar anomalies detected.", new_x="LMARGIN", new_y="NEXT")
             pdf.set_font("helvetica", "", 10)
         pdf.ln(5)
 
@@ -337,20 +422,72 @@ def download_run(
             f"**Date:** {run.finished_at or run.started_at}",
             f"**Confidence Score:** {int(s.overall_confidence * 100)}%",
             f"\n## Most Critical Update\n> {s.most_important_update}",
-            "\n## Market & Key Local Updates",
+            "\n## Academic & Technological Innovations",
         ]
-        if s.market_and_entities:
-            for item in s.market_and_entities:
-                md.append(f"- {item}")
+        if s.academic_research:
+            for paper in s.academic_research:
+                md.append(f"- **Title:** {paper.title}\n  *Key Findings:* {paper.key_findings}\n  *Application:* {paper.business_application}")
         else:
-            md.append("*No market updates reported.*")
+            md.append("*No academic research reported.*")
 
-        md.append("\n## Policy & Regulations Updates")
-        if s.policy_and_news:
-            for item in s.policy_and_news:
-                md.append(f"- {item}")
+        md.append("\n## Regulatory, Policy & Geopolitical Updates")
+        pol = s.policy_and_politics
+        has_pol = bool(pol.regulatory or pol.financial or pol.geopolitical)
+        if has_pol:
+            if pol.regulatory:
+                for item in pol.regulatory:
+                    md.append(f"- **Regulatory:** {item}")
+            if pol.financial:
+                for item in pol.financial:
+                    md.append(f"- **Financial/Budget:** {item}")
+            if pol.geopolitical:
+                for item in pol.geopolitical:
+                    md.append(f"- **Geopolitical/Trade:** {item}")
         else:
             md.append("*No policy or regulation updates reported.*")
+
+        md.append("\n## Strategic Corporate Deals & Partnerships")
+        if s.business_deals:
+            for deal in s.business_deals:
+                md.append(f"- **Entities:** {deal.entities}\n  *Strategic Impact:* {deal.strategic_impact}")
+        else:
+            md.append("*No strategic business deals reported.*")
+
+        md.append("\n## Environmental & Climate Risk Matrix")
+        cli = s.climate_and_weather
+        has_cli = bool(cli.threats or cli.opportunities)
+        if has_cli:
+            if cli.threats:
+                for t in cli.threats:
+                    md.append(f"- **Threat:** {t}")
+            if cli.opportunities:
+                for o in cli.opportunities:
+                    md.append(f"- **Opportunity:** {o}")
+        else:
+            md.append("*No environmental or climate updates reported.*")
+
+        md.append("\n## Competitor Intelligence & Sentiment")
+        comp = s.competitors_and_products
+        has_comp = bool(comp.new_products or comp.competitor_moves or comp.client_sentiment)
+        if has_comp:
+            if comp.new_products:
+                for np in comp.new_products:
+                    md.append(f"- **New Product:** {np}")
+            if comp.competitor_moves:
+                for m in comp.competitor_moves:
+                    md.append(f"- **Competitor Move:** {m}")
+            if comp.client_sentiment:
+                for cs in comp.client_sentiment:
+                    md.append(f"- **Client Sentiment/Demand:** {cs}")
+        else:
+            md.append("*No competitor updates reported.*")
+
+        md.append("\n## Emerging Radar Anomaly Signals")
+        if s.emerging_radar:
+            for item in s.emerging_radar:
+                md.append(f"- {item}")
+        else:
+            md.append("*No emerging radar anomalies detected.*")
 
         md.append("\n## Groundedness & Uncertainty Audit")
         if s.uncertainty_log:
