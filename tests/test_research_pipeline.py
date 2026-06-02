@@ -19,12 +19,6 @@ from bizpulse.models import (
     ChunkMetadata,
     DailyResearchReport,
     EmbeddedChunk,
-    AcademicTrackerOutput,
-    PolicyAnalystOutput,
-    MarketScoutOutput,
-    EnvironmentalMonitorOutput,
-    CompetitiveIntelligenceOutput,
-    RadarOutput,
 )
 from bizpulse.models.common import SUPPORTED_INDUSTRIES
 from bizpulse.retrieval import TenantQdrant

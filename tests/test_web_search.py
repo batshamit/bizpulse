@@ -34,10 +34,12 @@ async def test_gather_all_perspectives_success() -> None:
 
     mock_search = AsyncMock()
     mock_search.side_effect = [
-        [{"title": "Policy News", "link": "https://gov.in/policy", "snippet": "New budget release"}],
-        [{"title": "Scarcity News", "link": "https://reuters.com/scarcity", "snippet": "Trade issues"}],
-        [{"title": "Launches News", "link": "https://economictimes.com/launches", "snippet": "Product X launched"}],
         [{"title": "Research Paper", "link": "https://scholar.google.com/study", "snippet": "Gartner study on AI"}],
+        [{"title": "Policy News", "link": "https://gov.in/policy", "snippet": "New budget release"}],
+        [{"title": "Deals News", "link": "https://reuters.com/deals", "snippet": "M&A deal announced"}],
+        [{"title": "Climate News", "link": "https://esg.com/climate", "snippet": "Weather impact"}],
+        [{"title": "Competitor News", "link": "https://market.com/competitor", "snippet": "Competitor pricing shift"}],
+        [{"title": "Radar News", "link": "https://trend.com/radar", "snippet": "Emerging trends anomaly"}],
     ]
 
     with patch.object(client, "search", mock_search):
@@ -47,22 +49,28 @@ async def test_gather_all_perspectives_success() -> None:
             country="IN",
             state="Maharashtra",
         )
-        assert len(results) == 4
-        assert results[0]["title"] == "Policy News"
-        assert "Category: POLICY" in results[0]["snippet"]
-        assert results[1]["title"] == "Scarcity News"
-        assert "Category: SCARCITY" in results[1]["snippet"]
-        assert results[2]["title"] == "Launches News"
-        assert "Category: LAUNCHES" in results[2]["snippet"]
-        assert results[3]["title"] == "Research Paper"
-        assert "Category: RESEARCH" in results[3]["snippet"]
+        assert len(results) == 6
+        assert results[0]["title"] == "Research Paper"
+        assert "Category: ACADEMIC_RESEARCH" in results[0]["snippet"]
+        assert results[1]["title"] == "Policy News"
+        assert "Category: POLICY_AND_POLITICS" in results[1]["snippet"]
+        assert results[2]["title"] == "Deals News"
+        assert "Category: BUSINESS_DEALS" in results[2]["snippet"]
+        assert results[3]["title"] == "Climate News"
+        assert "Category: CLIMATE_AND_WEATHER" in results[3]["snippet"]
+        assert results[4]["title"] == "Competitor News"
+        assert "Category: COMPETITORS_AND_PRODUCTS" in results[4]["snippet"]
+        assert results[5]["title"] == "Radar News"
+        assert "Category: EMERGING_RADAR" in results[5]["snippet"]
 
-        assert mock_search.call_count == 4
+        assert mock_search.call_count == 6
         call_args = [args[0][0] for args in mock_search.call_args_list]
-        assert "gov.in" in call_args[0] or "pib.gov.in" in call_args[0]
-        assert "scarcity" in call_args[1]
-        assert "example" in call_args[2]
-        assert "scholar.google.com" in call_args[3]
+        assert "scholar.google.com" in call_args[0]
+        assert "gov.in" in call_args[1] or "pib.gov.in" in call_args[1]
+        assert "mergers" in call_args[2] or "funding" in call_args[2]
+        assert "climate" in call_args[3] or "weather" in call_args[3]
+        assert "competitors" in call_args[4]
+        assert "emerging" in call_args[5] or "anomalies" in call_args[5]
 
 
 @pytest.mark.asyncio
@@ -89,3 +97,21 @@ async def test_fetch_google_search_artifacts() -> None:
         assert "Category: POLICY" in artifacts[0].extracted_text
         assert artifacts[0].tenant_id == tenant_id
         assert artifacts[0].business_id == business.id
+
+
+def test_simplify_query() -> None:
+    from bizpulse.retrieval.web_search import simplify_query
+    q = '"real_estate" policy change (site:*.gov.in OR site:livemint.com) IN'
+    assert simplify_query(q) == "real_estate policy change IN"
+
+    q_research = '"industry" (latest research OR breakthrough OR study) (site:scholar.google.com OR site:nature.com OR site:arxiv.org)'
+    assert simplify_query(q_research) == "industry latest research breakthrough study"
+
+
+def test_relax_query() -> None:
+    from bizpulse.retrieval.web_search import relax_query
+    q = "real_estate policy change trade budget news IN"
+    assert relax_query(q) == "real_estate policy change IN"
+
+    q2 = "industry latest research breakthrough study"
+    assert relax_query(q2) == "industry latest research"

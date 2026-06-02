@@ -1,6 +1,6 @@
 """Business reference-document upload + management endpoints.
 
-Files (PDF/DOCX/TXT/MD/HTML, ≤20MB) are parsed to text, chunked, embedded,
+Files (PDF/DOCX/TXT/MD/HTML, ≤100MB) are parsed to text, chunked, embedded,
 and upserted into the per-tenant Qdrant collection — same collection the
 URL crawler writes to. The next /analyze on this business sees them as
 retrieval context alongside the crawled web pages.
@@ -17,15 +17,13 @@ returns 200 with the existing doc id, no re-embed.
 
 from __future__ import annotations
 
-import asyncio
 import os
 import tempfile
 from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from pydantic import BaseModel, Field
-from qdrant_client import QdrantClient
+from pydantic import BaseModel
 
 from bizpulse.api.dependencies import get_store, require_tenant
 from bizpulse.ingest.chunker import chunk_text
@@ -67,11 +65,8 @@ class DocumentSummary(BaseModel):
 # --- helpers --------------------------------------------------------------
 
 def _doc_repo_for(tenant_id, business_id: UUID) -> TenantQdrant:
-    """Per-business Qdrant collection. Same path runner_service uses for the
-    URL crawl — when /analyze runs for this business it'll see both."""
-    qd_dir = _QDRANT_BASE / f"biz-{business_id}"
-    qd_dir.mkdir(parents=True, exist_ok=True)
-    return TenantQdrant(tenant_id, client=QdrantClient(path=str(qd_dir)))
+    """Qdrant repository scoped to the tenant, utilizing the configured server or local fallback."""
+    return TenantQdrant(tenant_id)
 
 
 def _pick_embedder():
@@ -88,7 +83,7 @@ def _pick_embedder():
     status_code=status.HTTP_201_CREATED,
     summary="Upload a reference document for this business",
     description=(
-        "Accepts PDF / DOCX / TXT / MD / HTML up to 20 MB. The file's text "
+        "Accepts PDF / DOCX / TXT / MD / HTML up to 100 MB. The file's text "
         "is extracted, chunked, embedded, and added to the per-tenant Qdrant "
         "collection. The next /analyze for this business will see these "
         "chunks alongside the URL crawl."
@@ -133,7 +128,7 @@ async def upload_document(
         text = parse_document(data=data, content_type=ct)
     except UnsupportedDocumentTypeError as exc:
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=str(exc))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Failed to parse document: {exc!s}",
@@ -149,7 +144,7 @@ async def upload_document(
             embedder = _pick_embedder()
             try:
                 vectors = await embedder.embed([c.text for c in chunks])
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.warning("document.embed_failed", error=str(exc)[:200])
                 vectors = []
 

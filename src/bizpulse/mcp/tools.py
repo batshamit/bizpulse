@@ -181,15 +181,13 @@ async def query_business_knowledge(
     latest_run = max(completed_runs, key=lambda r: r.finished_at or r.started_at)
     run_id = latest_run.id
 
-    from qdrant_client import QdrantClient
 
-    from bizpulse.api.runner_service import _QDRANT_BASE, _pick_embedder
+    from bizpulse.api.runner_service import _pick_embedder
     from bizpulse.models.retrieval import RetrievalQuery
     from bizpulse.retrieval import RetrievalEngine, TenantQdrant
 
     embedder = _pick_embedder()
-    qd_dir = _QDRANT_BASE / f"run-{run_id}"
-    repo = TenantQdrant(tenant.id, client=QdrantClient(path=str(qd_dir)))
+    repo = TenantQdrant(tenant.id)
     retriever = RetrievalEngine(repo, embedder=embedder)
 
     query = RetrievalQuery(

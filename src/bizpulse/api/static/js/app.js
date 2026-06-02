@@ -30,6 +30,28 @@ async function bzpFetch(path, opts = {}) {
   return body;
 }
 
+async function bzpUploadFile(path, file) {
+  const headers = {};
+  const key = bzpApiKey();
+  if (key) headers['X-API-Key'] = key;
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const r = await fetch(path, {
+    method: 'POST',
+    headers: headers,
+    body: formData
+  });
+  const text = await r.text();
+  let body;
+  try { body = JSON.parse(text); } catch { body = text; }
+  if (!r.ok) {
+    const detail = (body && body.detail) ? body.detail : `HTTP ${r.status}`;
+    throw new Error(detail);
+  }
+  return body;
+}
+
 function bzpToast(msg, ms = 2200) {
   let t = document.createElement('div');
   t.className = 'bzp-toast';
@@ -206,6 +228,8 @@ document.addEventListener('alpine:init', () => {
     run_type: 'marketing_strategy', speed: 'general',
     busy: false, error: '',
     INDUSTRIES: [], COUNTRIES: [], STATES: {},
+    attachedFiles: [], dragOver: false,
+    contextMode: 'custom', customContextSaved: '',
     async init() {
       bzpRequireLogin();
       try {
@@ -216,10 +240,151 @@ document.addEventListener('alpine:init', () => {
         if (this.INDUSTRIES.length > 0) this.industry = this.INDUSTRIES[0].slug;
       } catch (e) { bzpToast('Metadata load failed: ' + e.message); }
     },
+    handleFiles(fileList) {
+      for (let i = 0; i < fileList.length; i++) {
+        const file = fileList[i];
+        if (file.size > 100 * 1024 * 1024) {
+          bzpToast(`File ${file.name} exceeds 100MB limit`);
+          continue;
+        }
+        this.attachedFiles.push(file);
+      }
+    },
+    removeFile(idx) {
+      this.attachedFiles.splice(idx, 1);
+    },
+    formatBytes(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    },
+    loadDefaultPrompt() {
+      this.context = `### SYSTEM INSTRUCTION: HIGH-PRIORITY OPERATIONAL CONTEXT
+
+You are the Lead Intelligence Orchestrator for {{COMPANY_OR_INDUSTRY}}. Your ultimate objective is to compile a comprehensive, daily operational brief for {{USER_PROFILE}}. 
+
+To execute this with maximum factual grounding and zero hallucination, you must prioritize data extracted from our verified custom search engine domains. You will orchestrate this workflow by dispatching 6 specialized data-gathering worker personas. 
+
+All personas must evaluate incoming data strictly through their designated domains and output short, highly structured summaries to prevent context bloat and ensure rapid inference on local GPU hardware.
+
+---
+
+### WORKER PERSONA DOMAIN ROUTING & TASKS
+
+#### Worker 1: The Academic (Research & Innovation)
+* **Verified High-Priority Domains:** arxiv.org, semanticscholar.org, core.ac.uk, doaj.org, plos.org, nature.com, researchgate.net, ieee.org.
+* **Task:** Scan for breakthroughs, published machine learning/software methodologies, hardware optimization insights, and peer-reviewed whitepapers directly applicable to {{COMPANY_OR_INDUSTRY}}.
+* **Output:** Bulleted list of new papers/studies. Include title, key technical findings, and a 1-sentence pragmatic business application for each.
+
+#### Worker 2: The Policy Analyst (Gov, Budget & Geo-Politics)
+* **Verified High-Priority Domains:** pib.gov.in, gov.in, nic.in, rbi.org.in, bseindia.com, nseindia.com, mca.gov.in, sebi.gov.in, reuters.com, economist.com, ft.com.
+* **Task:** Extract regulatory changes, legal amendments, state/central startup policy incentives, budget allocations, subsidies, and international trade/geopolitical shifts affecting operations.
+* **Output:** Structured bullet points strictly categorized by "Regulatory Changes," "Financial/Subsidy Allocations," and "Geopolitical/Macro Risk Factors."
+
+#### Worker 3: The Market Scout (Business Insights & Deals)
+* **Verified High-Priority Domains:** livemint.com, economictimes.indiatimes.com, moneycontrol.com, vccircle.com, techcrunch.com, inc42.com, business-standard.com, financialexpress.com, thehindubusinessline.com.
+* **Task:** Track recent M&A activity, corporate restructuring, demerger timelines, venture capital funding rounds, and localized strategic corporate partnerships.
+* **Output:** Chronological list of deals detailing the exact entities involved, deal size (if public), and targeted strategic market impact.
+
+#### Worker 4: The Environmental Monitor (Climate & Weather)
+* **Verified High-Priority Domains:** mausam.imd.gov.in, noaa.gov, wmo.int, skymetweather.com, icar.gov.in, nabard.org, fao.org, startup.bihar.gov.in.
+* **Task:** Analyze crop intelligence reports, rural developments, supply chain bottlenecks, real-time localized weather alerts, and predictive climate models to calculate risks to project yields and logistics.
+* **Output:** A high-level Threat/Opportunity Matrix distinguishing immediate localized risks from macro environmental trends.
+
+#### Worker 5: The Competitive Intelligence Agent (Competitors & Products)
+* **Verified High-Priority Domains:** producthunt.com, github.com, linkedin.com/news, gartner.com, g2.com, ibef.org, magicbricks.com/news, 99acres.com/articles.
+* **Task:** Detail what direct competitors are pushing to production, open-source framework upgrades (e.g., Angular, Node.js), client feedback metrics, market demand shifts, and real estate/infrastructure pricing trends.
+* **Output:** Categorized updates strictly divided into: "New Software/Product Launches," "Competitor Strategic Moves," and "Client Sentiment/Market Demand."
+
+#### Worker 6: The Radar Agent (Emerging Anomalies)
+* **Verified High-Priority Domains:** cve.mitre.org, ycombinator.com, and broad-spectrum network telemetry across all 50 configured domains.
+* **Task:** Scan for underlying systemic anomalies, newly released cybersecurity/WAF vulnerabilities, technical infrastructure warnings, or critical adjacent industry trends.
+* **Output:** Top 3 miscellaneous but critical operational alerts ranked by threat severity.
+
+---
+
+### THE SYNTHESIZER (FINAL EXECUTION PHASE)
+
+Review the compiled intelligence summaries from Workers 1 through 6. Formulate a single, unified daily executive report tailored specifically for the analytical consumption of {{USER_PROFILE}}.
+
+1.  **Executive Highlight:** Extract the single most critical, high-impact insight from the entire combined dataset. Place this at the absolute top of the briefing under a prominent \`# EXECUTIVE HIGHLIGHT\` heading.
+2.  **Report Structure:** Create an unambiguous, clearly labeled markdown section for each of the six areas (Research, Policy, Deals, Climate, Competitors, Radar). 
+3.  **Style & Formatting:** Use clear, professional language, concrete technical terminology, and highly scannable bullet points. Avoid editorial fluff.
+4.  **Integrity Constraint:** If any worker report relies on unverified news, speculative data, or unconfirmed adjustments, you must append an explicit \`[⚠️ UNVERIFIED]\` flag directly adjacent to the insight.`;
+
+      // Resolve variables dynamically
+      let companyOrIndustry = '';
+      if (this.url) {
+        try {
+          const u = new URL(this.url);
+          let host = u.hostname.replace('www.', '');
+          const dotIdx = host.indexOf('.');
+          if (dotIdx > 0) host = host.substring(0, dotIdx);
+          companyOrIndustry = host.toUpperCase();
+        } catch(e) {}
+      }
+      
+      const indObj = this.INDUSTRIES.find(ind => ind.slug === this.industry);
+      const industryName = indObj ? indObj.name : '';
+      
+      const countryObj = this.COUNTRIES.find(c => c.code === this.country);
+      const countryName = countryObj ? countryObj.name : '';
+      
+      let stateName = '';
+      if (this.state && this.STATES[this.country]) {
+        const stateObj = this.STATES[this.country].find(s => s.code === this.state);
+        if (stateObj) stateName = stateObj.name;
+      }
+      
+      let detailedInfo = '';
+      if (companyOrIndustry) {
+        detailedInfo = companyOrIndustry;
+        if (industryName) {
+          detailedInfo += ` (${industryName} industry`;
+          if (countryName) {
+            detailedInfo += ` in ${stateName ? stateName + ', ' : ''}${countryName}`;
+          }
+          detailedInfo += `)`;
+        }
+      } else if (industryName) {
+        detailedInfo = industryName;
+        if (countryName) {
+          detailedInfo += ` in ${stateName ? stateName + ', ' : ''}${countryName}`;
+        }
+      } else {
+        detailedInfo = 'your enterprise';
+      }
+      
+      this.context = this.context.replace(/\{\{COMPANY_OR_INDUSTRY\}\}/g, detailedInfo);
+      
+      const t = bzpTenant();
+      const tName = t ? t.name : 'Executive Board';
+      this.context = this.context.replace(/\{\{USER_PROFILE\}\}/g, tName + ' Analyst');
+      
+      bzpToast('Operational Briefing Template loaded!');
+    },
+    handleModeChange() {
+      if (this.contextMode === 'default') {
+        this.customContextSaved = this.context;
+        this.loadDefaultPrompt();
+      } else {
+        this.context = this.customContextSaved || '';
+      }
+    },
     async submit() {
       this.error = ''; this.busy = true;
       try {
         const biz = await bzpFetch('/v1/businesses', { method: 'POST', body: JSON.stringify({ url: this.url.trim(), industry: this.industry }) });
+        
+        // Dynamic parallel upload of all attached files before graph run trigger!
+        if (this.attachedFiles && this.attachedFiles.length > 0) {
+          bzpToast(`Uploading ${this.attachedFiles.length} reference document(s)...`);
+          await Promise.all(this.attachedFiles.map(file => bzpUploadFile('/v1/businesses/' + biz.id + '/documents', file)));
+          bzpToast('All reference documents uploaded successfully!');
+        }
+
         const bodyPayload = {
           country: this.country,
           state: this.state || null,

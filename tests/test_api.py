@@ -82,6 +82,35 @@ def test_business_lifecycle() -> None:
         assert biz["url"] == "https://acme-fintech.com"
         assert biz["tenant_id"] == tenant["id"]
 
+        # reference document uploads are supported and fully functional
+        dummy_file = ("dummy.txt", b"Hello world, this is a test reference document for Acme.", "text/plain")
+        r = client.post(
+            f"/v1/businesses/{biz['id']}/documents",
+            files={"file": dummy_file},
+            headers=h,
+        )
+        assert r.status_code == 201
+        doc = r.json()
+        assert doc["filename"] == "dummy.txt"
+        assert doc["content_type"] == "text/plain"
+        assert doc["n_chunks"] > 0
+
+        # documents can be listed
+        r = client.get(f"/v1/businesses/{biz['id']}/documents", headers=h)
+        assert r.status_code == 200
+        docs = r.json()
+        assert len(docs) == 1
+        assert docs[0]["id"] == doc["id"]
+
+        # documents can be deleted cleanly
+        r = client.delete(f"/v1/businesses/{biz['id']}/documents/{doc['id']}", headers=h)
+        assert r.status_code == 204
+
+        # list reflects deletion
+        r = client.get(f"/v1/businesses/{biz['id']}/documents", headers=h)
+        assert r.status_code == 200
+        assert len(r.json()) == 0
+
         # list reflects creation
         r = client.get("/v1/businesses", headers=h)
         assert r.status_code == 200
@@ -295,10 +324,10 @@ def test_downloads_and_chat_endpoints() -> None:
 
         from bizpulse.models import (
             AcademicPaper,
-            PolicyAnalystOutput,
             BusinessDeal,
-            EnvironmentalMonitorOutput,
             CompetitiveIntelligenceOutput,
+            EnvironmentalMonitorOutput,
+            PolicyAnalystOutput,
         )
 
         dr_report = DailyResearchReport(

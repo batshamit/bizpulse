@@ -62,7 +62,31 @@ class TenantQdrant:
     def ensure_collection(self, vector_size: int, distance: Distance = Distance.COSINE) -> None:
         existing = {c.name for c in self._client.get_collections().collections}
         if self.collection in existing:
-            return
+            try:
+                coll_info = self._client.get_collection(self.collection)
+                current_size = None
+                if hasattr(coll_info.config.params.vectors, "size"):
+                    current_size = coll_info.config.params.vectors.size
+                elif isinstance(coll_info.config.params.vectors, dict):
+                    first_val = list(coll_info.config.params.vectors.values())[0]
+                    current_size = getattr(first_val, "size", None)
+                
+                if current_size is not None and current_size != vector_size:
+                    log.warning(
+                        "qdrant.collection.dimension_mismatch",
+                        tenant=str(self.tenant_id),
+                        collection=self.collection,
+                        expected=vector_size,
+                        got=current_size,
+                        action="recreating_collection"
+                    )
+                    self._client.delete_collection(self.collection)
+                else:
+                    return
+            except Exception as exc:
+                log.warning("qdrant.collection.check_failed", error=str(exc))
+                return
+
         self._client.create_collection(
             collection_name=self.collection,
             vectors_config=VectorParams(size=vector_size, distance=distance),

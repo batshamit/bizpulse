@@ -30,6 +30,8 @@ SourceType = Literal[
     "screenshot_ocr",
     "competitor_page",
     "user_context",
+    "reference_doc",
+    "document",
 ]
 
 

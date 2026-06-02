@@ -71,26 +71,49 @@ async def health():
 
 @app.post("/embed")
 async def embed(req: EmbedRequest):
+    global device, model
     if task_type != "embed":
         return {"error": "Server is configured for reranking, not embeddings."}, 400
 
     if not req.inputs:
         return []
 
-    with torch.no_grad():
-        inputs = tokenizer(
-            req.inputs, padding=True, truncation=True, return_tensors="pt", max_length=512
-        )
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        outputs = model(**inputs)
-        # Use L2-normalized [CLS] token representation for BGE embeddings
-        embeddings = outputs[0][:, 0]
-        embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
-        return embeddings.cpu().tolist()
+    try:
+        with torch.no_grad():
+            inputs = tokenizer(
+                req.inputs, padding=True, truncation=True, return_tensors="pt", max_length=512
+            )
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+            outputs = model(**inputs)
+            # Use L2-normalized [CLS] token representation for BGE embeddings
+            embeddings = outputs[0][:, 0]
+            embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
+            res = embeddings.cpu().tolist()
+            if device == "cuda":
+                torch.cuda.empty_cache()
+            return res
+    except RuntimeError as e:
+        if "out of memory" in str(e).lower() and device == "cuda":
+            print("TEI Embedder encountered CUDA OOM. Falling back to CPU...")
+            torch.cuda.empty_cache()
+            device = "cpu"
+            model = model.to(device)
+            with torch.no_grad():
+                inputs = tokenizer(
+                    req.inputs, padding=True, truncation=True, return_tensors="pt", max_length=512
+                )
+                inputs = {k: v.to(device) for k, v in inputs.items()}
+                outputs = model(**inputs)
+                embeddings = outputs[0][:, 0]
+                embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
+                return embeddings.tolist()
+        else:
+            raise e
 
 
 @app.post("/rerank")
 async def rerank(req: RerankRequest):
+    global device, model
     if task_type != "rerank":
         return {"error": "Server is configured for embeddings, not reranking."}, 400
 
@@ -98,15 +121,34 @@ async def rerank(req: RerankRequest):
         return []
 
     pairs = [[req.query, doc] for doc in req.texts]
-    with torch.no_grad():
-        inputs = tokenizer(
-            pairs, padding=True, truncation=True, return_tensors="pt", max_length=512
-        )
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        outputs = model(**inputs)
-        logits = outputs.logits.view(-1).float()
-        # Scale scores using sigmoid to be strictly between 0 and 1
-        scores = torch.sigmoid(logits).cpu().tolist()
+    try:
+        with torch.no_grad():
+            inputs = tokenizer(
+                pairs, padding=True, truncation=True, return_tensors="pt", max_length=512
+            )
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+            outputs = model(**inputs)
+            logits = outputs.logits.view(-1).float()
+            # Scale scores using sigmoid to be strictly between 0 and 1
+            scores = torch.sigmoid(logits).cpu().tolist()
+            if device == "cuda":
+                torch.cuda.empty_cache()
+    except RuntimeError as e:
+        if "out of memory" in str(e).lower() and device == "cuda":
+            print("TEI Reranker encountered CUDA OOM. Falling back to CPU...")
+            torch.cuda.empty_cache()
+            device = "cpu"
+            model = model.to(device)
+            with torch.no_grad():
+                inputs = tokenizer(
+                    pairs, padding=True, truncation=True, return_tensors="pt", max_length=512
+                )
+                inputs = {k: v.to(device) for k, v in inputs.items()}
+                outputs = model(**inputs)
+                logits = outputs.logits.view(-1).float()
+                scores = torch.sigmoid(logits).tolist()
+        else:
+            raise e
 
     results = [{"index": i, "score": scores[i]} for i in range(len(req.texts))]
     results.sort(key=lambda x: x["score"], reverse=True)

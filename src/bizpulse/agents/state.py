@@ -12,17 +12,17 @@ from uuid import UUID
 
 from bizpulse.models import (
     AcademicTrackerOutput,
-    PolicyAnalystOutput,
-    MarketScoutOutput,
-    EnvironmentalMonitorOutput,
-    CompetitiveIntelligenceOutput,
-    RadarOutput,
     AudienceAnalysis,
     BrandAnalysis,
+    CompetitiveIntelligenceOutput,
     CompetitiveLandscape,
     ContentAudit,
     DailyResearchReport,
+    EnvironmentalMonitorOutput,
     MarketingStrategy,
+    MarketScoutOutput,
+    PolicyAnalystOutput,
+    RadarOutput,
 )
 from bizpulse.models.agents import AgentTrace
 from bizpulse.models.compliance import ComplianceReport
@@ -52,6 +52,8 @@ class AnalysisState(TypedDict, total=False):
     """Type of run: 'marketing_strategy' or 'daily_research'."""
     speed: str
     """Speed mode: 'general' (local-first) or 'ultra_fast' (cloud-first)."""
+    additional_context: str | None
+    """Tenant-provided additional guidelines and reference instructions for the run."""
 
     # ---- per-agent outputs (each node fills its slot) ----
     brand: BrandAnalysis | None

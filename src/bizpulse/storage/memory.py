@@ -13,7 +13,6 @@ from __future__ import annotations
 import secrets
 import threading
 from datetime import datetime
-from typing import Literal
 from uuid import UUID, uuid4
 
 from bizpulse.models import (
@@ -298,8 +297,8 @@ class InMemoryStore:
             raise KeyError(f"unknown business: {business_id}")
         if biz.tenant_id != tenant_id:
             raise ValueError("business belongs to a different tenant")
-        import socket
         import os
+        import socket
         with self._lock:
             run = RunRecord(
                 id=uuid4(),
@@ -415,8 +414,8 @@ class InMemoryStore:
 
     def fail_orphaned_runs(self) -> int:
         """Find any runs that are currently in a non-terminal state and mark them as failed."""
-        import socket
         import os
+        import socket
         from datetime import timedelta
         count = 0
         current_hostname = socket.gethostname()

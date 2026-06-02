@@ -128,7 +128,7 @@ def chunk_text(text: str) -> list[Chunk]:
         business_id=dummy_id,
         source_url="doc://upload",
         source_type="document",
-        content_hash="",
+        content_hash=RawArtifact.hash_text(text),
         extracted_text=text,
     )
     return chunk_artifact(artifact)

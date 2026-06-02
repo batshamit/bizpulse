@@ -175,37 +175,176 @@
               <h2 style="margin:0; font-size:1.25rem; font-family:'Source Serif 4',serif; color:var(--bzp-accent-dark); line-height:1.45;" x-text="run.final_output.most_important_update"></h2>
             </div>
 
-            <!-- Two Column Layout for Market vs Policy -->
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-bottom:1.8rem;">
-              <!-- Market & Entities -->
-              <div style="background:white; border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:1.25rem;">
-                <h3 style="margin-top:0; display:flex; align-items:center; gap:0.5rem; font-size:1.05rem;">
-                  📊 Market & Key local updates
+            <!-- 6 specialized domains grid -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr)); gap:1.5rem; margin-bottom:1.8rem;">
+              
+              <!-- Worker 1: Academic & Innovation -->
+              <div style="background:#ffffff; border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:1.25rem; box-shadow: var(--bzp-shadow-sm); border-top: 4px solid #6366F1; display: flex; flex-direction: column;">
+                <h3 style="margin-top:0; margin-bottom: 0.8rem; display:flex; align-items:center; gap:0.5rem; font-size:1.05rem; color:#4F46E5;">
+                  🔬 Academic & Innovation
                 </h3>
-                <ul style="padding-left:1.2rem; margin:0.8rem 0; line-height:1.6; color:var(--bzp-ink-soft); font-size:0.92rem;">
-                  <template x-for="item in run.final_output.market_and_entities" :key="item">
-                    <li style="margin-bottom:0.6rem;" x-text="item"></li>
+                <div style="flex: 1; display:flex; flex-direction:column; gap:0.8rem;">
+                  <template x-for="paper in run.final_output.academic_research" :key="paper.title">
+                    <div style="font-size:0.9rem; padding: 0.5rem; background: var(--bzp-cream); border-radius: 6px; border-left: 2px solid #6366F1;">
+                      <strong style="color:var(--bzp-ink-dark); display:block; margin-bottom: 0.2rem;" x-text="paper.title"></strong>
+                      <span style="color:var(--bzp-ink-soft); display:block; font-size:0.85rem; margin-bottom:0.2rem;" x-text="'Findings: ' + paper.key_findings"></span>
+                      <span style="color:var(--bzp-accent); font-weight:600; display:block; font-size:0.85rem;" x-text="'Business Application: ' + paper.business_application"></span>
+                    </div>
                   </template>
-                  <template x-if="!run.final_output.market_and_entities || run.final_output.market_and_entities.length === 0">
-                    <li style="color:var(--bzp-ink-faint); font-style:italic;">No market updates reported.</li>
+                  <template x-if="!run.final_output.academic_research || run.final_output.academic_research.length === 0">
+                    <div style="color:var(--bzp-ink-faint); font-style:italic; font-size:0.92rem; text-align:center; padding: 1rem 0;">No research breakthroughs reported.</div>
                   </template>
-                </ul>
+                </div>
               </div>
 
-              <!-- Policy & Regulations -->
-              <div style="background:white; border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:1.25rem;">
-                <h3 style="margin-top:0; display:flex; align-items:center; gap:0.5rem; font-size:1.05rem;">
+              <!-- Worker 2: Policy & Regulations -->
+              <div style="background:#ffffff; border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:1.25rem; box-shadow: var(--bzp-shadow-sm); border-top: 4px solid #3B82F6; display: flex; flex-direction: column;">
+                <h3 style="margin-top:0; margin-bottom: 0.8rem; display:flex; align-items:center; gap:0.5rem; font-size:1.05rem; color:#2563EB;">
                   ⚖️ Policy & Regulations
                 </h3>
-                <ul style="padding-left:1.2rem; margin:0.8rem 0; line-height:1.6; color:var(--bzp-ink-soft); font-size:0.92rem;">
-                  <template x-for="item in run.final_output.policy_and_news" :key="item">
-                    <li style="margin-bottom:0.6rem;" x-text="item"></li>
+                <div style="flex: 1; display:flex; flex-direction:column; gap:0.8rem; font-size:0.9rem;">
+                  <!-- Regulatory -->
+                  <template x-if="run.final_output.policy_and_politics.regulatory && run.final_output.policy_and_politics.regulatory.length > 0">
+                    <div>
+                      <span style="font-weight: 600; color: var(--bzp-ink-dark); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em; display:block; margin-bottom: 0.3rem;">Regulatory Compliance Rules</span>
+                      <ul style="padding-left:1.1rem; margin:0; line-height:1.5; color:var(--bzp-ink-soft); font-size:0.88rem; list-style-type: square;">
+                        <template x-for="reg in run.final_output.policy_and_politics.regulatory" :key="reg">
+                          <li style="margin-bottom:0.3rem;" x-text="reg"></li>
+                        </template>
+                      </ul>
+                    </div>
                   </template>
-                  <template x-if="!run.final_output.policy_and_news || run.final_output.policy_and_news.length === 0">
-                    <li style="color:var(--bzp-ink-faint); font-style:italic;">No regulatory updates reported.</li>
+                  <!-- Financial -->
+                  <template x-if="run.final_output.policy_and_politics.financial && run.final_output.policy_and_politics.financial.length > 0">
+                    <div style="margin-top:0.4rem;">
+                      <span style="font-weight: 600; color: var(--bzp-ink-dark); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em; display:block; margin-bottom: 0.3rem;">Financial & Interest Rates</span>
+                      <ul style="padding-left:1.1rem; margin:0; line-height:1.5; color:var(--bzp-ink-soft); font-size:0.88rem; list-style-type: square;">
+                        <template x-for="fin in run.final_output.policy_and_politics.financial" :key="fin">
+                          <li style="margin-bottom:0.3rem;" x-text="fin"></li>
+                        </template>
+                      </ul>
+                    </div>
                   </template>
-                </ul>
+                  <!-- Geopolitical -->
+                  <template x-if="run.final_output.policy_and_politics.geopolitical && run.final_output.policy_and_politics.geopolitical.length > 0">
+                    <div style="margin-top:0.4rem;">
+                      <span style="font-weight: 600; color: var(--bzp-ink-dark); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em; display:block; margin-bottom: 0.3rem;">Geopolitical Shifts</span>
+                      <ul style="padding-left:1.1rem; margin:0; line-height:1.5; color:var(--bzp-ink-soft); font-size:0.88rem; list-style-type: square;">
+                        <template x-for="geo in run.final_output.policy_and_politics.geopolitical" :key="geo">
+                          <li style="margin-bottom:0.3rem;" x-text="geo"></li>
+                        </template>
+                      </ul>
+                    </div>
+                  </template>
+                  <template x-if="(!run.final_output.policy_and_politics.regulatory || run.final_output.policy_and_politics.regulatory.length === 0) && (!run.final_output.policy_and_politics.financial || run.final_output.policy_and_politics.financial.length === 0) && (!run.final_output.policy_and_politics.geopolitical || run.final_output.policy_and_politics.geopolitical.length === 0)">
+                    <div style="color:var(--bzp-ink-faint); font-style:italic; font-size:0.92rem; text-align:center; padding: 1rem 0;">No policy or regulatory updates.</div>
+                  </template>
+                </div>
               </div>
+
+              <!-- Worker 3: Market & Corporate Deals -->
+              <div style="background:#ffffff; border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:1.25rem; box-shadow: var(--bzp-shadow-sm); border-top: 4px solid #10B981; display: flex; flex-direction: column;">
+                <h3 style="margin-top:0; margin-bottom: 0.8rem; display:flex; align-items:center; gap:0.5rem; font-size:1.05rem; color:#059669;">
+                  🤝 Market & Corporate Deals
+                </h3>
+                <div style="flex: 1; display:flex; flex-direction:column; gap:0.8rem;">
+                  <template x-for="deal in run.final_output.business_deals" :key="deal.entities">
+                    <div style="font-size:0.9rem; padding: 0.5rem; background: var(--bzp-cream); border-radius: 6px; border-left: 2px solid #10B981;">
+                      <strong style="color:var(--bzp-ink-dark); display:block; margin-bottom: 0.2rem;" x-text="deal.entities"></strong>
+                      <span style="color:var(--bzp-ink-soft); display:block; font-size:0.85rem;" x-text="deal.strategic_impact"></span>
+                    </div>
+                  </template>
+                  <template x-if="!run.final_output.business_deals || run.final_output.business_deals.length === 0">
+                    <div style="color:var(--bzp-ink-faint); font-style:italic; font-size:0.92rem; text-align:center; padding: 1rem 0;">No high-value corporate deals or partnerships reported.</div>
+                  </template>
+                </div>
+              </div>
+
+              <!-- Worker 4: Climate & Environment -->
+              <div style="background:#ffffff; border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:1.25rem; box-shadow: var(--bzp-shadow-sm); border-top: 4px solid #F59E0B; display: flex; flex-direction: column;">
+                <h3 style="margin-top:0; margin-bottom: 0.8rem; display:flex; align-items:center; gap:0.5rem; font-size:1.05rem; color:#D97706;">
+                  🌍 Climate & Environment
+                </h3>
+                <div style="flex: 1; display:flex; flex-direction:column; gap:0.8rem; font-size:0.9rem;">
+                  <!-- Threats -->
+                  <template x-if="run.final_output.climate_and_weather.threats && run.final_output.climate_and_weather.threats.length > 0">
+                    <div>
+                      <span style="font-weight: 600; color: var(--bzp-danger); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em; display:block; margin-bottom: 0.3rem;">ESG & Climate Threats</span>
+                      <ul style="padding-left:1.1rem; margin:0; line-height:1.5; color:var(--bzp-ink-soft); font-size:0.88rem; list-style-type: disc;">
+                        <template x-for="t in run.final_output.climate_and_weather.threats" :key="t">
+                          <li style="margin-bottom:0.3rem;" x-text="t"></li>
+                        </template>
+                      </ul>
+                    </div>
+                  </template>
+                  <!-- Opportunities -->
+                  <template x-if="run.final_output.climate_and_weather.opportunities && run.final_output.climate_and_weather.opportunities.length > 0">
+                    <div style="margin-top: 0.5rem;">
+                      <span style="font-weight: 600; color: var(--bzp-success); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em; display:block; margin-bottom: 0.3rem;">Green Opportunities</span>
+                      <ul style="padding-left:1.1rem; margin:0; line-height:1.5; color:var(--bzp-ink-soft); font-size:0.88rem; list-style-type: circle;">
+                        <template x-for="o in run.final_output.climate_and_weather.opportunities" :key="o">
+                          <li style="margin-bottom:0.3rem;" x-text="o"></li>
+                        </template>
+                      </ul>
+                    </div>
+                  </template>
+                  <template x-if="(!run.final_output.climate_and_weather.threats || run.final_output.climate_and_weather.threats.length === 0) && (!run.final_output.climate_and_weather.opportunities || run.final_output.climate_and_weather.opportunities.length === 0)">
+                    <div style="color:var(--bzp-ink-faint); font-style:italic; font-size:0.92rem; text-align:center; padding: 1rem 0;">No environmental risks or opportunities noted.</div>
+                  </template>
+                </div>
+              </div>
+
+              <!-- Worker 5: Competitors & Products -->
+              <div style="background:#ffffff; border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:1.25rem; box-shadow: var(--bzp-shadow-sm); border-top: 4px solid #EC4899; display: flex; flex-direction: column;">
+                <h3 style="margin-top:0; margin-bottom: 0.8rem; display:flex; align-items:center; gap:0.5rem; font-size:1.05rem; color:#DB2777;">
+                  🎯 Competitors & Products
+                </h3>
+                <div style="flex: 1; display:flex; flex-direction:column; gap:0.8rem; font-size:0.9rem;">
+                  <!-- Competitor Moves -->
+                  <template x-if="run.final_output.competitors_and_products.competitor_moves && run.final_output.competitors_and_products.competitor_moves.length > 0">
+                    <div>
+                      <span style="font-weight: 600; color: var(--bzp-ink-dark); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em; display:block; margin-bottom: 0.3rem;">Competitor Actions</span>
+                      <ul style="padding-left:1.1rem; margin:0; line-height:1.5; color:var(--bzp-ink-soft); font-size:0.88rem; list-style-type: square;">
+                        <template x-for="move in run.final_output.competitors_and_products.competitor_moves" :key="move">
+                          <li style="margin-bottom:0.3rem;" x-text="move"></li>
+                        </template>
+                      </ul>
+                    </div>
+                  </template>
+                  <!-- Client Sentiment -->
+                  <template x-if="run.final_output.competitors_and_products.client_sentiment && run.final_output.competitors_and_products.client_sentiment.length > 0">
+                    <div style="margin-top:0.5rem;">
+                      <span style="font-weight: 600; color: var(--bzp-ink-dark); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em; display:block; margin-bottom: 0.3rem;">Client Needs & Sentiment</span>
+                      <ul style="padding-left:1.1rem; margin:0; line-height:1.5; color:var(--bzp-ink-soft); font-size:0.88rem; list-style-type: circle;">
+                        <template x-for="sent in run.final_output.competitors_and_products.client_sentiment" :key="sent">
+                          <li style="margin-bottom:0.3rem;" x-text="sent"></li>
+                        </template>
+                      </ul>
+                    </div>
+                  </template>
+                  <template x-if="(!run.final_output.competitors_and_products.competitor_moves || run.final_output.competitors_and_products.competitor_moves.length === 0) && (!run.final_output.competitors_and_products.client_sentiment || run.final_output.competitors_and_products.client_sentiment.length === 0)">
+                    <div style="color:var(--bzp-ink-faint); font-style:italic; font-size:0.92rem; text-align:center; padding: 1rem 0;">No competitive gaps or launches tracked.</div>
+                  </template>
+                </div>
+              </div>
+
+              <!-- Worker 6: Emerging Radar -->
+              <div style="background:#ffffff; border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:1.25rem; box-shadow: var(--bzp-shadow-sm); border-top: 4px solid #14B8A6; display: flex; flex-direction: column;">
+                <h3 style="margin-top:0; margin-bottom: 0.8rem; display:flex; align-items:center; gap:0.5rem; font-size:1.05rem; color:#0D9488;">
+                  📡 Emerging Radar Signals
+                </h3>
+                <div style="flex: 1; display:flex; flex-direction:column; gap:0.8rem;">
+                  <ul style="padding-left:1.2rem; margin:0; line-height:1.6; color:var(--bzp-ink-soft); font-size:0.92rem;">
+                    <template x-for="signal in run.final_output.emerging_radar" :key="signal">
+                      <li style="margin-bottom:0.6rem; border-left: 2px solid #14B8A6; padding-left:0.5rem; list-style-type:none;" x-text="signal"></li>
+                    </template>
+                    <template x-if="!run.final_output.emerging_radar || run.final_output.emerging_radar.length === 0">
+                      <li style="color:var(--bzp-ink-faint); font-style:italic; list-style-type:none; text-align:center; padding: 1rem 0;">No anomalies or new adjacent signals observed on the radar.</li>
+                    </template>
+                  </ul>
+                </div>
+              </div>
+
             </div>
 
             <!-- Groundedness & Uncertainty Log -->
@@ -283,45 +422,66 @@
         </template>
 
         <template x-if="run.final_output">
-          <div class="bzp-card">
-            <h2>Executive summary</h2>
-            <p x-text="run.final_output.summary" style="line-height:1.65; color:var(--bzp-ink-soft); margin:1rem 0;"></p>
+          <div class="bzp-card" style="padding: 2rem; background: #ffffff;">
+            <!-- Executive Summary Highlight Box -->
+            <div style="background: var(--bzp-cream); border-left: 4px solid var(--bzp-accent); padding: 1.5rem; border-radius: var(--bzp-radius); margin-bottom: 2rem;">
+              <h3 style="margin: 0 0 0.6rem; font-size: 0.95rem; font-weight: 600; color: var(--bzp-ink-soft); text-transform: uppercase; letter-spacing: 0.05em;">Executive Summary Highlight</h3>
+              <p x-text="run.final_output.summary" style="line-height: 1.65; color: var(--bzp-ink); font-size: 1.05rem; font-weight: 500; font-family: var(--bzp-font-serif); margin: 0;"></p>
+            </div>
 
-            <div x-show="run.final_output.inclusivity_metrics" style="margin-top:2rem;">
-              <h3>Inclusivity Scorecard (4 L's)</h3>
-              <div class="bzp-llll-grid" style="margin-top:1rem;">
-                <template x-for="key in [['last','LAST customer'], ['least','LEAST-considered'], ['lost','LOST customers'], ['lowest','LOWEST budget']]" :key="key[0]">
-                  <div class="bzp-llll-card" style="padding:0.6rem 0.8rem;">
-                    <div class="bzp-llll-name" style="font-size:0.75rem;" x-text="key[1]"></div>
-                    <div class="bzp-llll-value" style="font-size:1.1rem; margin-top:0.2rem;" x-text="((run.final_output.inclusivity_metrics[key[0]] || 0)*100).toFixed(0) + '%'"></div>
-                    <div class="bzp-llll-bar"><span :style="`width: ${(run.final_output.inclusivity_metrics[key[0]] || 0)*100}%`"></span ></div>
+            <!-- Inclusivity Scorecard Section -->
+            <div x-show="run.final_output.inclusivity_metrics" style="margin-top: 2rem; margin-bottom: 2rem;">
+              <h3 style="font-size: 1.15rem; font-weight: 700; color: var(--bzp-ink); margin-bottom: 1rem; border-bottom: 2px solid var(--bzp-cream); padding-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                📊 Inclusivity Scorecard (4 L's)
+              </h3>
+              <div class="bzp-llll-grid" style="margin-top: 1rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                <template x-for="key in [['last','LAST customer (Late Adopters)', '#005A9C'], ['least','LEAST-considered (Under-served)', '#4682B4'], ['lost','LOST customers (Churned)', '#D56C50'], ['lowest','LOWEST budget (Price-sensitive)', '#708090']]" :key="key[0]">
+                  <div class="bzp-llll-card" style="padding: 1rem; border-radius: var(--bzp-radius); border: 1px solid var(--bzp-border); background: var(--bzp-cream); box-shadow: var(--bzp-shadow-sm);">
+                    <div class="bzp-llll-name" style="font-size: 0.72rem; font-weight: 600; color: var(--bzp-ink-soft); text-transform: uppercase; letter-spacing: 0.02em;" x-text="key[1]"></div>
+                    <div class="bzp-llll-value" style="font-size: 1.6rem; font-weight: 700; color: var(--bzp-ink-dark); margin: 0.4rem 0;" x-text="((run.final_output.inclusivity_metrics[key[0]] || 0)*100).toFixed(0) + '%'"></div>
+                    <div style="width: 100%; height: 6px; background: #e0e0e0; border-radius: 4px; overflow: hidden;">
+                      <div :style="`width: ${(run.final_output.inclusivity_metrics[key[0]] || 0)*100}%; background: ${key[2]};`" style="height: 100%; border-radius: 4px;"></div>
+                    </div>
                   </div>
                 </template>
               </div>
-              <p x-text="run.final_output.inclusivity_metrics?.narrative" style="font-size:0.88rem; color:var(--bzp-ink-soft); font-style:italic; margin-top:0.8rem;"></p>
+              <p x-text="run.final_output.inclusivity_metrics?.narrative" style="font-size: 0.9rem; color: var(--bzp-ink-soft); font-style: italic; margin-top: 1rem; line-height: 1.5; padding-left: 0.5rem; border-left: 2px solid var(--bzp-border);"></p>
             </div>
 
-            <hr class="bzp-divider">
+            <hr class="bzp-divider" style="margin: 2rem 0;">
 
-            <h3>Recommendations</h3>
+            <!-- Actionable Recommendations Grid/Cards -->
+            <h3 style="font-size: 1.15rem; font-weight: 700; color: var(--bzp-ink); margin-bottom: 1rem; border-bottom: 2px solid var(--bzp-cream); padding-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+              🎯 Actionable Recommendations
+            </h3>
             <template x-for="(r, i) in (run.final_output.recommendations || [])" :key="i">
-              <!-- ... recommendation card (unchanged) ... -->
-              <div style="border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:1rem 1.2rem; margin:0.8rem 0;">
-                <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:0.5rem;">
-                  <span class="bzp-pill bzp-pill-accent" x-text="r.priority"></span>
-                  <span class="bzp-pill bzp-pill-neutral" x-text="r.channel"></span>
-                  <span style="color:var(--bzp-ink-faint); font-size:0.78rem;" x-text="`conf ${(r.confidence*100).toFixed(0)}%`"></span >
+              <div :style="r.priority === 'P0' ? 'border-left: 5px solid var(--bzp-accent); background: #fdfcf7;' : 'border-left: 5px solid #005a9c; background: #ffffff;'" style="border: 1px solid var(--bzp-border); border-radius: var(--bzp-radius); padding: 1.5rem; margin: 1.2rem 0; box-shadow: var(--bzp-shadow-sm); transition: transform 0.2s, box-shadow 0.2s;">
+                <div style="display: flex; gap: 0.6rem; align-items: center; margin-bottom: 0.8rem; flex-wrap: wrap;">
+                  <span class="bzp-pill" :class="r.priority === 'P0' ? 'bzp-pill-accent' : 'bzp-pill-neutral'" style="font-weight:600;" x-text="r.priority"></span>
+                  <span class="bzp-pill bzp-pill-neutral" style="text-transform:uppercase; letter-spacing:0.02em;" x-text="r.channel.replace('_', ' ')"></span>
+                  <span style="color: var(--bzp-ink-soft); font-size: 0.82rem; font-weight: 500;" x-text="`Confidence Score: ${(r.confidence*100).toFixed(0)}%`"></span>
                 </div>
-                <div style="font-weight:500; margin-bottom:0.4rem;" x-text="r.action"></div>
-                <div style="color:var(--bzp-ink-soft); font-size:0.9rem;" x-text="r.rationale"></div>
-                <div x-show="r.compliance_flags?.length" style="margin-top:0.5rem;">
+                
+                <div style="font-size: 1.05rem; font-weight: 700; color: var(--bzp-ink-dark); margin-bottom: 0.5rem; line-height: 1.4;" x-text="r.action"></div>
+                <div style="color: var(--bzp-ink-soft); font-size: 0.92rem; line-height: 1.5; margin-bottom: 0.8rem;" x-text="r.rationale"></div>
+                
+                <!-- Expected Impact Dynamic Callout Badge -->
+                <template x-if="r.expected_impact">
+                  <div style="margin-top: 0.8rem; margin-bottom: 0.8rem; display: inline-flex; align-items: center; gap: 0.4rem; background: rgba(212, 175, 55, 0.08); border: 1px solid rgba(212, 175, 55, 0.2); padding: 0.5rem 0.8rem; border-radius: var(--bzp-radius); font-size: 0.85rem; color: #a17c18;">
+                    <strong style="font-weight: 700; text-transform: uppercase; font-size: 0.78rem; letter-spacing: 0.02em;">Expected Impact:</strong>
+                    <span x-text="r.expected_impact"></span>
+                  </div>
+                </template>
+
+                <div x-show="r.compliance_flags?.length" style="margin-top: 0.8rem; display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+                  <strong style="font-size: 0.78rem; color: var(--bzp-danger); text-transform: uppercase; margin-right: 0.2rem;">Compliance:</strong>
                   <template x-for="f in (r.compliance_flags || [])" :key="f">
-                    <span class="bzp-pill bzp-pill-warning" style="margin-right:0.3rem;" x-text="f"></span>
+                    <span class="bzp-pill bzp-pill-warning" style="font-weight: 500; font-family: monospace;" x-text="f"></span>
                   </template>
                 </div>
 
                 <!-- Chat section -->
-                <div style="margin-top:1rem; border-top:1px solid var(--bzp-border); padding-top:0.8rem;"
+                <div style="margin-top: 1.2rem; border-top: 1px solid var(--bzp-border); padding-top: 1rem;"
                      x-data="{ 
                        open: false, msg: '', reply: '', busy: false,
                        async chat() {
@@ -337,17 +497,17 @@
                          finally { this.busy = false; }
                        }
                      }">
-                  <button @click="open = !open" class="bzp-btn bzp-btn-ghost" style="font-size:0.8rem; padding:0.3rem 0.6rem;">
+                  <button @click="open = !open" class="bzp-btn bzp-btn-ghost" style="font-size: 0.82rem; padding: 0.4rem 0.8rem; display: inline-flex; align-items: center; gap: 0.3rem;">
                     <span x-show="!open">💬 Chat about implementation</span>
-                    <span x-show="open">Close chat</span>
+                    <span x-show="open">❌ Close implementation chat</span>
                   </button>
-                  <div x-show="open" style="margin-top:0.8rem;">
+                  <div x-show="open" style="margin-top: 1rem;">
                     <template x-if="reply">
-                       <div style="background:var(--bzp-cream); padding:0.8rem; border-radius:var(--bzp-radius); margin-bottom:0.8rem; font-size:0.9rem; border:1px solid var(--bzp-border); white-space:pre-wrap;" x-text="reply"></div>
+                       <div style="background: var(--bzp-cream); padding: 1rem; border-radius: var(--bzp-radius); margin-bottom: 1rem; font-size: 0.92rem; border: 1px solid var(--bzp-border); white-space: pre-wrap; line-height: 1.5; color: var(--bzp-ink);" x-text="reply"></div>
                     </template>
-                    <div style="display:flex; gap:0.5rem;">
-                      <input x-model="msg" placeholder="Ask a question..." class="bzp-input" style="flex:1; font-size:0.85rem;" @keyup.enter="chat()">
-                      <button @click="chat()" :disabled="busy || !msg.trim()" class="bzp-btn bzp-btn-primary" style="font-size:0.85rem;">
+                    <div style="display: flex; gap: 0.5rem;">
+                      <input x-model="msg" placeholder="Ask a question about executing this strategy..." class="bzp-input" style="flex: 1; font-size: 0.88rem;" @keyup.enter="chat()">
+                      <button @click="chat()" :disabled="busy || !msg.trim()" class="bzp-btn bzp-btn-primary" style="font-size: 0.88rem; padding: 0 1.2rem;">
                         <span x-show="!busy">Send</span>
                         <span x-show="busy">...</span>
                       </button>
@@ -357,26 +517,38 @@
               </div>
             </template>
 
-            <div x-show="run.final_output.detailed_channel_strategies?.length" style="margin-top:2rem;">
-              <hr class="bzp-divider">
-              <h3>Detailed Channel Strategies</h3>
-              <template x-for="ds in run.final_output.detailed_channel_strategies" :key="ds.channel">
-                <div style="margin:1rem 0; padding-bottom:1rem; border-bottom:1px solid var(--bzp-border-faint);">
-                  <div style="font-weight:600; font-size:1.05rem; margin-bottom:0.4rem;" x-text="ds.channel.toUpperCase().replace('_', ' ')"></div>
-                  <div style="line-height:1.6; color:var(--bzp-ink-soft); font-size:0.95rem; white-space:pre-wrap;" x-text="ds.strategy_details"></div>
-                  <div x-show="ds.key_metrics?.length" style="margin-top:0.6rem;">
-                    <span style="font-size:0.8rem; font-weight:500; color:var(--bzp-ink-faint);">Key Metrics:</span>
-                    <template x-for="m in ds.key_metrics" :key="m">
-                      <span class="bzp-pill bzp-pill-neutral" style="margin-left:0.3rem;" x-text="m"></span>
-                    </template>
+            <!-- Detailed Channel Strategies Section -->
+            <div x-show="run.final_output.detailed_channel_strategies?.length" style="margin-top: 3rem;">
+              <hr class="bzp-divider" style="margin: 2rem 0;">
+              <h3 style="font-size: 1.15rem; font-weight: 700; color: var(--bzp-ink); margin-bottom: 1rem; border-bottom: 2px solid var(--bzp-cream); padding-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                📱 Detailed Channel Strategies
+              </h3>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+                <template x-for="ds in run.final_output.detailed_channel_strategies" :key="ds.channel">
+                  <div style="border: 1px solid var(--bzp-border); border-radius: var(--bzp-radius); padding: 1.5rem; background: #fafafa; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                      <div style="font-weight: 700; font-size: 1.05rem; margin-bottom: 0.6rem; color: var(--bzp-accent); text-transform: uppercase; letter-spacing: 0.02em;" x-text="ds.channel.replace('_', ' ')"></div>
+                      <div style="line-height: 1.6; color: var(--bzp-ink-soft); font-size: 0.92rem; white-space: pre-wrap; margin-bottom: 1rem;" x-text="ds.strategy_details"></div>
+                    </div>
+                    <div x-show="ds.key_metrics?.length" style="border-top: 1px dashed var(--bzp-border); padding-top: 0.8rem; margin-top: auto;">
+                      <span style="font-size: 0.8rem; font-weight: 600; color: var(--bzp-ink-soft); text-transform: uppercase; letter-spacing: 0.02em;">Key Metrics:</span>
+                      <div style="display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.3rem;">
+                        <template x-for="m in ds.key_metrics" :key="m">
+                          <span class="bzp-pill bzp-pill-neutral" style="font-size: 0.78rem;" x-text="m"></span>
+                        </template>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </template>
+                </template>
+              </div>
             </div>
 
-            <div x-show="run.final_output.benefit_report" style="margin-top:2rem; background:var(--bzp-accent-soft); padding:1.2rem; border-radius:var(--bzp-radius);">
-              <h3 style="color:var(--bzp-accent); margin-top:0;">Business Benefit Report</h3>
-              <p x-text="run.final_output.benefit_report" style="line-height:1.65; color:var(--bzp-ink-soft); margin:0.5rem 0 0; white-space:pre-wrap;"></p>
+            <!-- Business Benefit Report -->
+            <div x-show="run.final_output.benefit_report" style="margin-top: 3rem; background: #f4fdf4; border: 1px solid rgba(34, 139, 34, 0.2); border-left: 5px solid #228B22; padding: 1.5rem; border-radius: var(--bzp-radius);">
+              <h3 style="color: #228B22; margin-top: 0; font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem;">
+                📈 Business Benefit Report
+              </h3>
+              <p x-text="run.final_output.benefit_report" style="line-height: 1.65; color: var(--bzp-ink-soft); margin: 0.5rem 0 0; white-space: pre-wrap; font-size: 0.95rem;"></p>
             </div>
 
             <div x-show="run.final_output.competitive_landscape?.competitors?.length" style="margin-top:2rem;">
@@ -424,19 +596,7 @@
               </div>
             </div>
 
-            <!-- Interactive Live Search Engine -->
-            <div class="bzp-card" style="margin-bottom:1.5rem; border-left: 4px solid var(--bzp-accent); padding: 1.5rem; background: #ffffff;">
-              <h3 style="margin:0 0 1rem; font-size:1.1rem; font-weight:700; color:var(--bzp-ink); display:flex; align-items:center; gap:0.5rem;">
-                🔍 Manual Live Custom Search
-              </h3>
-              <p style="font-size:0.88rem; color:var(--bzp-ink-soft); margin-bottom:1rem;">
-                Run manual custom queries directly against your Google Custom Search Engine (CSE) to inspect live policies, trade announcements, M&A deals, or academic portals.
-              </p>
-              <div style="border: 1px solid var(--bzp-border); border-radius: var(--bzp-radius); padding: 1rem; background: var(--bzp-cream);">
-                <script async src="https://cse.google.com/cse.js?cx=36269e580474d4c9d"></script>
-                <div class="gcse-search"></div>
-              </div>
-            </div>
+
 
             <!-- 6 Domains Grid -->
             <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:1.5rem; margin-bottom:1.5rem;">
@@ -652,7 +812,8 @@
             <template x-for="f in run.final_output.compliance_report.flags" :key="f.policy_slug + f.issue">
               <div style="border:1px solid var(--bzp-border); border-radius:var(--bzp-radius); padding:1rem 1.2rem; margin:0.8rem 0;">
                 <div>
-                  <span class="bzp-pill" :class="`bzp-pill-${f.severity === 'critical' || f.severity === 'violation' ? 'danger' : (f.severity === 'warning' ? 'warning' : 'neutral')}`" x-text="f.severity"></span >
+                  <span class="bzp-pill" :class="f.severity === 'critical' ? 'bzp-pill-danger' : (f.severity === 'violation' || f.severity === 'warning' ? 'bzp-pill-danger' : 'bzp-pill-neutral')" 
+                        x-text="f.severity === 'critical' ? '[CRITICAL EXPOSURE]' : (f.severity === 'violation' || f.severity === 'warning' ? '[HIGH RISK]' : '[OPERADVISORY]')"></span>
                   <span style="color:var(--bzp-ink-soft); font-family:monospace; font-size:0.8rem; margin-left:0.4rem;" x-text="f.policy_slug"></span>
                 </div>
                 <div style="margin:0.6rem 0;" x-text="f.issue"></div>
@@ -689,7 +850,7 @@
               📎 Drop files here or click to choose
             </div>
             <div style="font-size:0.8rem; color:var(--bzp-ink-faint);">
-              PDF · DOCX · TXT · MD · HTML · CSV · up to 20 MB each
+              PDF · DOCX · TXT · MD · HTML · CSV · up to 100 MB each
             </div>
           </div>
 

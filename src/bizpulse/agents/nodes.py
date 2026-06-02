@@ -144,9 +144,18 @@ def _make_analyst(
                         else:
                             few_shot_examples.append(sub_val)
             try:
+                node_task = task
+                add_ctx = state.get("additional_context")
+                if add_ctx:
+                    node_task += (
+                        f"\n\n[PRIORITY DIRECTIVE]: The tenant has provided the following additional context/guidelines for this run: '{add_ctx}'.\n"
+                        f"You MUST strictly prioritize and align all your findings, observations, and recommendations to this additional context. "
+                        f"If any reference documents or user-provided files are present in the retrieved chunks below (specifically search for chunks with type='reference_doc' or type='user_context'), "
+                        f"you MUST heavily weigh, prioritize, and cite those specific source chunks in your output."
+                    )
                 r = await runner.run(
                     agent=agent_name,  # type: ignore[arg-type]
-                    task=task,
+                    task=node_task,
                     output_schema=output_schema,
                     query_text=query_text,
                     few_shot_examples=few_shot_examples,
@@ -309,8 +318,7 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
     Llama-3.3-70B AWQ model on port 8801, with a silent fallback to Qwen 14B on port 8800."""
 
     async def strategist(state: AnalysisState) -> dict[str, object]:
-        import os
-        from bizpulse.agents.nodes import _trace, _record_repair, _summarize_prior_compact
+        from bizpulse.agents.nodes import _record_repair, _summarize_prior_compact, _trace
 
         prior = _summarize_prior_compact(state)
         t0 = time.perf_counter()
@@ -332,10 +340,22 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
 
         # High-USP Premium Strategist prompt focusing on Real Business Insights
         task_str = (
-            "Produce a HIGH-USP, ULTRA-SPECIFIC MarketingStrategy for THIS business. "
-            "Generic industry advice is a failure. Required fields:\n"
+            "### SYSTEM ROLE & DIRECTIVE\n"
+            "You are a dual-capability expert: an Elite Strategy Consultant (akin to McKinsey or Bain) and a Big-4 Regulatory Auditor (akin to Deloitte or PwC).\n\n"
+            "Your objective is to synthesize raw intelligence spanning six core domains (Academic, Policy, Deals, Climate, Competitors, Radar) and transform it into a premium, board-ready Strategic Marketing & Compliance Blueprint for this business.\n\n"
+            "### CRITICAL INSTRUCTION HIERARCHY\n"
+            "Do not begin with social media tactics. Your overarching mandate is to derive the marketing strategy *directly* from the macro-business intelligence. Every digital campaign must be explicitly justified by a real-world data point from the 6 domains.\n\n"
+            "Produce a HIGH-USP, ULTRA-SPECIFIC MarketingStrategy for THIS business. Required fields:\n"
             "  - tenant_id, business_id, industry (echo from input)\n"
-            "  - recommendations (3-7 prioritized, highly actionable items with clear metrics)\n"
+            "  - recommendations (3-7 prioritized, highly actionable items with clear metrics). Mapping to:\n"
+            "    **SECTION 2: INSIGHT-DRIVEN MARKET ACTIVATION (The Strategy)**\n"
+            "    * For each recommendation/campaign initiative, you must include:\n"
+            "      - 'action' (The Initiative): (e.g., 'Yield-Focused NRI Targeting Campaign')\n"
+            "      - 'rationale' (The Anchor & Execution): In this field, write a structured and formatted text containing:\n"
+            "        **The Intelligence Anchor:** Grounded in domain data/market intelligence shifts (e.g., 'Rooted in Domain 4 data showing a 15% uptick in NRI demand and Domain 2 changes to EBLR rates.')\n"
+            "        **The Execution:** Specific messaging angles, channel selection, and target personas.\n"
+            "      - 'evidence_chunk_ids': exact chunk UUIDs that ground this claim.\n"
+            "      - 'channel', 'priority', 'confidence', 'expected_impact'\n"
             "  - detailed_channel_strategies (MANDATORY): Provide deep-dives as a LIST of objects. "
             "    Each object MUST have: 'channel' (the slug: 'linkedin', 'google_search', etc.), 'strategy_details' (text), "
             "    'key_metrics' (list of strings), 'implementation_steps' (list), "
@@ -343,41 +363,38 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
             "      * linkedin (separate strategy focused on B2B/Thought-leadership)\n"
             "      * youtube or instagram (Social Media)\n"
             "      * google_search or email (Search & Direct)\n"
-            "  - inclusivity_metrics (OPTIONAL): The '4 L's' (last, least, lost, lowest) should be kept strictly as "
-            "    ONE specific section of the report. Provide 'last', 'least', 'lost', 'lowest' (floats between 0.0 and 1.0) and "
-            "    'narrative' (a required 1-3 sentence string explanation of how the strategy serves or misses these segments). "
-            "    Do NOT dedicate the entire report to this; focus the rest of the strategy entirely on premium quality real business insights.\n"
+            "  - inclusivity_metrics (OPTIONAL): Mapping to:\n"
+            "    **SECTION 3: THE 4L MARKET PENETRATION MATRIX (Inclusivity)**\n"
+            "    * Dedicate this specific, contained matrix to address the 4L Framework to ensure comprehensive market capture. "
+            "    * Set floats for 'last', 'least', 'lost', 'lowest' (0.0 to 1.0) and write a structured narrative in the 'narrative' field explaining the exact basis for each score:\n"
+            "      - **LAST (Late Adopters):** Strategy to convert legacy/hesitant demographics.\n"
+            "      - **LEAST (Under-Served):** Strategy for neglected market segments or emerging micromarkets.\n"
+            "      - **LOST (Churned):** Re-engagement tactics for lapsed clients/investors.\n"
+            "      - **LOWEST (Budget):** Entry-tier offerings or top-of-funnel conversion tactics.\n"
             "  - benefit_report: A detailed, multi-paragraph corporate analysis explaining business ROI, "
             "    strategic value, competitive advantage, digital transformation, and why this specific strategy is highly beneficial for OUR company.\n"
             "  - overall_confidence (0..1)\n"
-            "  - summary (3-5 sentence executive overview summarizing all gathered data in a boardroom-ready format)\n\n"
-            "Strategy quality bar:\n"
-            "  * All recommendations, channel strategies, and benefit reports MUST use a highly professional, "
-            "    executive-ready, corporate-standard tone suitable for immediate presentation to C-level executives "
-            "    and board members. Focus heavily on real business insights, growth levers, and market acquisition.\n"
-            "  * The Board-Ready recommendations and Detailed Channel Strategies MUST NOT be limited to simple digital/social media advice. "
-            "    You MUST actively synthesize and address the retrieved Market Intelligence in the context, including:\n"
-            "      - Specific regulatory/policy constraints or compliance updates (e.g. SEBI, RBI, RERA, DPDP/GDPR) relevant to this industry and region.\n"
-            "      - Academic breakthroughs or technical innovations.\n"
-            "      - Corporate M&A/deals or competitor pivots.\n"
-            "      - Climate threats and ESG concerns.\n"
-            "    Ensure that at least half of your board-ready recommendations are strategic, domain-specific growth levers grounded in these market intelligence fields.\n"
-            "  * Proactively align all recommendations and strategies with applicable regulations and policies "
-            "    such as RBI/SEBI digital lending and investment guidelines (for financial/fintech products), "
-            "    RERA (for real estate/proptech), DPDP/GDPR (for user data privacy and protection). Ensure that any "
-            "    proposed actions are structured to prevent compliance or regulatory violations.\n"
-            "  * Every recommendation and channel strategy MUST reference a specific "
-            "    business detail lifted from the prior summaries or context.\n"
-            "  * Take special help from the LinkedIn pages and competitor mentions "
-            "    found in the retrieved context to collect data on their tactics.\n"
-            "  * Each recommendation MUST include a CUSTOMER BENEFIT target, "
-            "    explicitly addressing one of the '4 L's'.\n"
-            "  * Citations MUST use the exact 'chunk_id' (valid UUID) from the retrieved chunks. "
-            "    Do NOT invent or shorten chunk_ids.\n\n"
+            "  - summary (3-5 sentence executive overview summarizing all gathered data in a boardroom-ready format). Mapping to:\n"
+            "    **SECTION 1: MACRO INTELLIGENCE SYNTHESIS (The Foundation)**\n"
+            "    * Analyze the provided intelligence across the 6 domains. Extract the 3 to 4 most critical market shifts, competitor vulnerabilities, or macroeconomic trends.\n"
+            "    * Write a high-level strategic synthesis. Do not just summarize the data; explain *what it means* for the company's market positioning and revenue growth.\n\n"
+            "### TONE & FORMATTING CONSTRAINTS\n"
+            "  * Tone: Authoritative, deeply analytical, and commercially pragmatic. Avoid marketing fluff, emojis, or enthusiastic filler words (e.g., 'Exciting', 'Amazing').\n"
+            "  * Formatting: Use strict Markdown hierarchy, bolded taxonomy tags, and clean bullet points to simulate a multi-thousand-dollar consultancy deliverable.\n"
+            "  * Citations MUST use the exact 'chunk_id' (valid UUID) from the retrieved chunks. Do NOT invent or shorten chunk_ids.\n\n"
             "Set `brand`, `audience`, `competitive_landscape`, `content_audit` "
             "to null — they're merged from prior outputs after you return.\n\n"
             f"Prior agent outputs (summarized):\n{prior}"
         )
+
+        add_ctx = state.get("additional_context")
+        if add_ctx:
+            task_str += (
+                f"\n\n[PRIORITY DIRECTIVE]: The tenant has provided the following additional context/guidelines for this run: '{add_ctx}'.\n"
+                f"You MUST strictly prioritize and align all your findings, observations, and recommendations to this additional context. "
+                f"If any reference documents or user-provided files are present in the retrieved chunks below (specifically search for chunks with type='reference_doc' or type='user_context'), "
+                f"you MUST heavily weigh, prioritize, and cite those specific source chunks in your output."
+            )
 
         # Route to Llama-3.3-70B on local port 8801 if active.
         # Fallback to Groq Llama 3.3 70B (single-call mode) if local is offline or fails.
@@ -436,9 +453,9 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
                     tried_configs.append(f"local_high_tier ({local_model_name})")
                     log.info("nodes.strategist.attempting_local_high_tier", model=local_model_name, base_url=local_base_url)
                     try:
-                        from bizpulse.llm.openai_compat import OpenAICompatClient
                         from bizpulse.agents.council import Council
                         from bizpulse.agents.runner import AgentRunner as LocalRunner
+                        from bizpulse.llm.openai_compat import OpenAICompatClient
 
                         llama_client = OpenAICompatClient(
                             vendor="local",
@@ -495,9 +512,9 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
                 tried_configs.append("google_gemini")
                 log.info("nodes.strategist.attempting_google_gemini")
                 try:
-                    from bizpulse.llm.gemini_client import GeminiClient
                     from bizpulse.agents.council import Council
                     from bizpulse.agents.runner import AgentRunner as LocalRunner
+                    from bizpulse.llm.gemini_client import GeminiClient
 
                     gemini_client = GeminiClient(
                         model="gemini-2.5-flash"
@@ -531,9 +548,9 @@ def make_strategist_node(runner: AgentRunner) -> NodeFn:
                 tried_configs.append("groq_llama_3.3_70b")
                 log.info("nodes.strategist.attempting_groq_llama_3.3_70b_as_last_resort")
                 try:
-                    from bizpulse.llm.openai_compat import OpenAICompatClient
                     from bizpulse.agents.council import Council
                     from bizpulse.agents.runner import AgentRunner as LocalRunner
+                    from bizpulse.llm.openai_compat import OpenAICompatClient
 
                     groq_client = OpenAICompatClient(
                         vendor="groq",

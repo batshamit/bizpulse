@@ -223,8 +223,8 @@ class PostgresStore:
             raise ValueError("business belongs to a different tenant")
         run_id = uuid4()
         import json
-        import socket
         import os
+        import socket
 
         hostname = socket.gethostname()
         pid = os.getpid()
@@ -566,8 +566,8 @@ class PostgresStore:
 
     def fail_orphaned_runs(self) -> int:
         """Find any runs that are currently in a non-terminal state and mark them as failed."""
-        import socket
         import os
+        import socket
         from datetime import timedelta
         
         current_hostname = socket.gethostname()

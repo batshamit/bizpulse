@@ -9,7 +9,7 @@
   <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:wght@400;500;600&display=swap' rel='stylesheet'>
   <link rel='stylesheet' href='/ui/css/app.css'>
   <script defer src='https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js'></script>
-  <script src='/ui/js/app.js'></script>
+  <script src='/ui/js/app.js?v=2.0.1'></script>
 </head>
 <body>
 
@@ -70,10 +70,28 @@
     </div>
 
     <div style='margin-top:1.5rem;'>
-      <label class='bzp-label' for='context'>Additional Context (Policies, internal reports, specific requirements)</label>
-      <textarea id='context' x-model='context' placeholder="Paste extra context here... e.g. 'Our internal policy is to always offer 0% EMI for students' or specific RERA circulars." class='bzp-input' style='min-height:120px; font-family:inherit;'></textarea>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem; flex-wrap: wrap; gap: 0.5rem;">
+        <label class='bzp-label' for='context' style="margin-bottom:0;">Additional Context & Prompts</label>
+        <div style="display: inline-flex; background: var(--bzp-cream); border: 1px solid var(--bzp-border); border-radius: 30px; padding: 4px; gap: 4px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05); align-items: center;">
+          <div @click="contextMode = 'custom'; handleModeChange()" 
+               style="font-size: 0.78rem; font-weight: 600; color: var(--bzp-ink-soft); cursor: pointer; display: flex; align-items: center; gap: 0.4rem; padding: 0.45rem 1rem; border-radius: 25px; transition: all 0.2s ease-in-out;" 
+               :style="contextMode === 'custom' ? 'background: #ffffff; color: var(--bzp-accent); box-shadow: 0 2px 4px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04); font-weight: 700;' : 'opacity: 0.85;'"
+               @mouseover="$el.style.opacity = '1'"
+               @mouseleave="if(contextMode !== 'custom') $el.style.opacity = '0.85'">
+            ✍️ Custom Context
+          </div>
+          <div @click="contextMode = 'default'; handleModeChange()" 
+               style="font-size: 0.78rem; font-weight: 600; color: var(--bzp-ink-soft); cursor: pointer; display: flex; align-items: center; gap: 0.4rem; padding: 0.45rem 1rem; border-radius: 25px; transition: all 0.2s ease-in-out;" 
+               :style="contextMode === 'default' ? 'background: #ffffff; color: var(--bzp-accent); box-shadow: 0 2px 4px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04); font-weight: 700;' : 'opacity: 0.85;'"
+               @mouseover="$el.style.opacity = '1'"
+               @mouseleave="if(contextMode !== 'default') $el.style.opacity = '0.85'">
+            ✨ Default Briefing Template
+          </div>
+        </div>
+      </div>
+      <textarea id='context' x-model='context' placeholder="Select 'Default Briefing Template' to auto-load the HIGH-PRIORITY OPERATIONAL CONTEXT prompt, or select 'Custom Context' to write your own custom rules..." class='bzp-input' style='min-height:160px; font-family:inherit;'></textarea>
       <div style='color:var(--bzp-ink-faint); font-size:0.8rem; margin-top:0.4rem;'>
-        This text will be chunked and indexed alongside the website crawl. Agents prioritize this information for high specificity.
+        This text will be chunked and indexed alongside the website crawl. The agent reasoning nodes will strictly prioritize and cite this context.
       </div>
     </div>
 
@@ -118,23 +136,54 @@
     <hr class='bzp-divider'>
 
     <!-- Optional reference docs -->
-    <div x-data="docsUpload()" x-init="init()">
+    <div style="margin-top:1.5rem;">
       <label class="bzp-label" style="margin-bottom:0.6rem;">Attach reference documents (optional)</label>
-      <div style="color:var(--bzp-ink-faint); font-size:0.78rem; margin-bottom:0.6rem;">
-        PDF / DOCX / TXT / MD / HTML up to 20 MB each. Examples: a brand-guidelines doc,
-        an internal compliance policy, prior strategy reports. Their text is chunked + embedded
-        into your business's knowledge base and the agents will cite them alongside the URL crawl.
+      <div style="color:var(--bzp-ink-faint); font-size:0.78rem; margin-bottom:0.8rem;">
+        PDF / DOCX / TXT / MD / HTML up to 100 MB each. Their text is chunked & embedded into your business's knowledge base, and agents will prioritize and cite them as ground truth alongside the crawled pages.
       </div>
 
-      <!-- We can't upload until the business exists; so this step happens AFTER
-           the user submits the form and we have a business_id. For now, show a
-           hint that docs can be added on the dashboard. The actual upload UI
-           lives on a per-business detail page (next iteration). -->
-      <div style="background:var(--bzp-cream); border:1px dashed var(--bzp-border); border-radius:var(--bzp-radius); padding:1rem 1.2rem; font-size:0.85rem; color:var(--bzp-ink-soft);">
-        💡 After you start the analysis below, you can upload reference docs from the
-        report page (or via <code>POST /v1/businesses/{id}/documents</code>).
-        Re-run the analysis to include them.
+      <!-- Hidden file input -->
+      <input type="file" id="reference_docs" multiple accept=".pdf,.docx,.txt,.md,.html" @change="handleFiles($event.target.files)" style="display:none;">
+
+      <!-- Interactive Drag & Drop Area -->
+      <div 
+        @click="document.getElementById('reference_docs').click()"
+        @dragover.prevent="dragOver = true"
+        @dragleave.prevent="dragOver = false"
+        @drop.prevent="dragOver = false; handleFiles($event.dataTransfer.files)"
+        :style="dragOver ? 'border: 2px dashed var(--bzp-accent); background: var(--bzp-accent-soft);' : 'border: 2px dashed var(--bzp-border); background: var(--bzp-cream);'"
+        style="border-radius: var(--bzp-radius); padding: 1.5rem; text-align: center; cursor: pointer; transition: all 0.2s ease-in-out;"
+      >
+        <div style="font-size: 2rem; margin-bottom: 0.5rem; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.05));">📁</div>
+        <div style="font-weight: 500; font-size: 0.9rem; color: var(--bzp-ink);">
+          Drag & Drop reference files here, or <span style="color: var(--bzp-accent); text-decoration: underline; font-weight: 600;">browse</span>
+        </div>
+        <div style="font-size: 0.75rem; color: var(--bzp-ink-faint); margin-top: 0.3rem;">
+          Supports PDF, DOCX, TXT, MD, HTML (Max 100MB per file)
+        </div>
       </div>
+
+      <!-- Selected Files Preview List -->
+      <template x-if="attachedFiles.length > 0">
+        <div style="margin-top: 1rem; border: 1px solid var(--bzp-border); border-radius: var(--bzp-radius); background: #ffffff; padding: 0.6rem 0.9rem; box-shadow: var(--bzp-shadow-sm);">
+          <div style="font-size: 0.8rem; font-weight: 600; color: var(--bzp-ink-soft); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; display: flex; justify-content: space-between; align-items: center;">
+            <span>Selected Reference Documents</span>
+            <span style="color: var(--bzp-accent);" x-text="attachedFiles.length + ' file(s)'"></span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+            <template x-for="(file, idx) in attachedFiles" :key="idx">
+              <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem; padding: 0.4rem 0; border-bottom: 1px solid var(--bzp-cream);">
+                <div style="display: flex; align-items: center; gap: 0.5rem; overflow: hidden; white-space: nowrap;">
+                  <span style="font-size: 1.1rem;">📄</span>
+                  <span style="font-weight: 500; color: var(--bzp-ink); text-overflow: ellipsis; overflow: hidden;" x-text="file.name"></span>
+                  <span style="font-size: 0.75rem; color: var(--bzp-ink-faint);" x-text="formatBytes(file.size)"></span>
+                </div>
+                <button type="button" @click="removeFile(idx)" style="background: none; border: none; color: var(--bzp-danger); cursor: pointer; font-size: 0.8rem; font-weight: 600; padding: 0.2rem 0.5rem; transition: color 0.15s;" @mouseover="$el.style.textDecoration='underline'" @mouseout="$el.style.textDecoration='none'">Remove</button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
     </div>
 
     <hr class="bzp-divider">

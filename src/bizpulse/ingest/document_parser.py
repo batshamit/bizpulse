@@ -49,7 +49,7 @@ _EXT_FALLBACK = {
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 
-MAX_DOC_BYTES = 20 * 1024 * 1024  # 20 MB — covers most real-world PDFs
+MAX_DOC_BYTES = 100 * 1024 * 1024  # 100 MB — covers larger PDFs and documents
 
 
 def detect_content_type(filename: str, declared: str | None) -> str:
@@ -124,7 +124,7 @@ def _parse_pdf(data: bytes) -> str:
     for i, page in enumerate(reader.pages):
         try:
             t = page.extract_text() or ""
-        except Exception as exc:  # noqa: BLE001 — pypdf raises various
+        except Exception as exc:
             log.warning("pdf.page_parse_failed", page=i, error=str(exc)[:200])
             continue
         if t.strip():
@@ -148,5 +148,5 @@ def _parse_docx(data: bytes) -> str:
     finally:
         try:
             Path(tmp_path).unlink()
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass

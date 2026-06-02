@@ -23,8 +23,8 @@ from bizpulse import __version__
 from bizpulse.api.admin import router as admin_router
 from bizpulse.api.audit import router as audit_router
 from bizpulse.api.businesses import router as businesses_router
-from bizpulse.api.industries import router as metadata_router
 from bizpulse.api.documents import router as documents_router
+from bizpulse.api.industries import router as metadata_router
 from bizpulse.api.runs import router as runs_router
 from bizpulse.api.tenants import router as tenants_router
 from bizpulse.api.usage import router as usage_router

@@ -14,6 +14,18 @@ log = get_logger(__name__)
 NodeFn = Any
 
 
+def _append_additional_context(task: str, state: AnalysisState) -> str:
+    add_ctx = state.get("additional_context")
+    if add_ctx:
+        task += (
+            f"\n\n[PRIORITY DIRECTIVE]: The tenant has provided the following additional context/guidelines for this run: '{add_ctx}'.\n"
+            f"You MUST strictly prioritize and align all your findings, observations, and recommendations to this additional context. "
+            f"If any reference documents or user-provided files are present in the retrieved chunks below (specifically search for chunks with type='reference_doc' or type='user_context'), "
+            f"you MUST heavily weigh, prioritize, and cite those specific source chunks in your output."
+        )
+    return task
+
+
 def make_academic_tracker_node(runner: AgentRunner) -> NodeFn:
     """Sub-agent node for Worker 1: The Academic (Research & Innovation)."""
 
@@ -36,15 +48,17 @@ def make_academic_tracker_node(runner: AgentRunner) -> NodeFn:
 
         task = (
             f"Act as Worker 1: The Academic (Research & Innovation) for the {pack.name} domain for {location_str}.\n"
-            f"Your objective is to identify the latest academic research, technical breakthroughs, or scientific innovations "
-            f"applicable to {pack.name}. Scan for papers/studies relating to the following entities: {entities_str}.\n"
-            "Cite chunk_ids from the retrieved context. Be ultra-specific and factual.\n"
-            "Keep the output extremely structured, fact-based, and under 300 words in total."
+            f"Your objective is to extract cutting-edge academic research, technological breakthroughs, and scientific innovations "
+            f"applicable to {pack.name}, specifically looking for studies on: {entities_str}.\n"
+            "Do NOT return generic suggestions. Focus on high-value, realistic advancements and translate them into direct, concrete business opportunities and growth levers for our company.\n"
+            "Cite chunk_ids from the retrieved context. Be highly factual, quantitative, and professional.\n"
+            "Keep the output structured, premium boardroom-quality, and under 350 words."
         )
 
         query_text = f"academic research breakthrough technology paper journal preprint science {entities_str}"
 
         try:
+            task = _append_additional_context(task, state)
             r = await runner.run(
                 agent=agent_name,  # type: ignore[arg-type]
                 task=task,
@@ -102,15 +116,17 @@ def make_policy_analyst_node(runner: AgentRunner) -> NodeFn:
 
         task = (
             f"Act as Worker 2: The Policy Analyst (Gov, Budget & Geo-Politics) for the {pack.name} domain for {location_str}.\n"
-            f"Your objective is to monitor and identify regulatory updates, policy shifts, tax reforms (like GST), budget allocations, "
-            f"subsidies, geo-political/trade updates, or interest-rate changes affecting this sector (e.g., {regs_str}).\n"
-            "Cite chunk_ids from the retrieved context. Be ultra-specific and factual.\n"
-            "Keep the output extremely structured, fact-based, and under 300 words in total."
+            f"Your objective is to monitor and identify specific regulatory updates, policy shifts, tax reforms (like GST/tariffs), budget allocations, "
+            f"subsidies, interest-rate changes, or geo-political updates affecting this sector (e.g., {regs_str}).\n"
+            "Provide direct operational impact, compliance risk exposure, and specific strategic guidance to navigate these guidelines (e.g. SEBI, RBI, RERA, DPDP/GDPR rules depending on geography).\n"
+            "Cite chunk_ids from the retrieved context. Be extremely specific, fact-based, and boardroom-ready.\n"
+            "Keep the output structured, premium boardroom-quality, and under 350 words."
         )
 
         query_text = f"policy regulation tax budget subsidy interest rates geopolitical trade GST RERA {regs_str}"
 
         try:
+            task = _append_additional_context(task, state)
             r = await runner.run(
                 agent=agent_name,  # type: ignore[arg-type]
                 task=task,
@@ -166,15 +182,17 @@ def make_market_scout_node(runner: AgentRunner) -> NodeFn:
 
         task = (
             f"Act as Worker 3: The Market Scout (Business Insights & Deals) for the {pack.name} domain for {location_str}.\n"
-            f"Your objective is to identify and track strategic corporate developments, including mergers and acquisitions (M&A), "
-            f"funding rounds, major partnerships, investments, joint ventures, or market expansions related to the industry and entities: {entities_str}.\n"
-            "Cite chunk_ids from the retrieved context. Be ultra-specific and factual.\n"
-            "Keep the output extremely structured, fact-based, and under 300 words in total."
+            f"Your objective is to identify and track major corporate moves, including strategic mergers & acquisitions (M&A), "
+            f"funding rounds, venture investments, joint ventures, high-value partnerships, or market expansions related to: {entities_str}.\n"
+            "Highlight the exact entities involved and analyze the strategic implications of these deals on our competitive positioning.\n"
+            "Cite chunk_ids from the retrieved context. Be ultra-specific, factual, and boardroom-ready.\n"
+            "Keep the output structured, premium boardroom-quality, and under 350 words."
         )
 
         query_text = f"M&A merger acquisition funding investment partnership deal venture expansion startup {entities_str}"
 
         try:
+            task = _append_additional_context(task, state)
             r = await runner.run(
                 agent=agent_name,  # type: ignore[arg-type]
                 task=task,
@@ -231,15 +249,16 @@ def make_environmental_monitor_node(runner: AgentRunner) -> NodeFn:
 
         task = (
             f"Act as Worker 4: The Environmental Monitor (Climate & Weather) for the {pack.name} domain for {location_str}.\n"
-            f"Your objective is to identify environment, climate, weather, or sustainability threats and opportunities affecting this sector. "
-            f"Examples: extreme weather risks, ESG mandates, carbon tax impacts, green technology opportunities.\n"
-            "Cite chunk_ids from the retrieved context. Be ultra-specific and factual.\n"
-            "Keep the output extremely structured, fact-based, and under 300 words in total."
+            f"Your objective is to identify specific ESG/climate threats and operational green opportunities affecting this sector. "
+            f"Analyze extreme weather disruption risks, carbon tax impacts, net-zero regulations, and green technology/ESG financing opportunities.\n"
+            "Cite chunk_ids from the retrieved context. Be ultra-specific, fact-grounded, and boardroom-ready.\n"
+            "Keep the output structured, premium boardroom-quality, and under 350 words."
         )
 
-        query_text = f"climate weather ESG sustainability environmental risk green carbon emission natural disaster"
+        query_text = "climate weather ESG sustainability environmental risk green carbon emission natural disaster"
 
         try:
+            task = _append_additional_context(task, state)
             r = await runner.run(
                 agent=agent_name,  # type: ignore[arg-type]
                 task=task,
@@ -295,15 +314,17 @@ def make_competitive_intelligence_node(runner: AgentRunner) -> NodeFn:
 
         task = (
             f"Act as Worker 5: The Competitive Intelligence Agent (Competitors & Products) for the {pack.name} domain for {location_str}.\n"
-            f"Your objective is to scan for competitor moves, new product announcements/launches/pivots, feature expansions, "
-            f"pricing shifts, or client/consumer sentiment changes in the market related to {entities_str}.\n"
-            "Cite chunk_ids from the retrieved context. Be ultra-specific and factual.\n"
-            "Keep the output extremely structured, fact-based, and under 300 words in total."
+            f"Your objective is to analyze competitor pricing shifts, digital transformations, product pivots, feature expansions, "
+            f"and client sentiment trends regarding {entities_str}.\n"
+            "Extract actual unmet customer pain points and outline how our product can exploit these competitive gaps.\n"
+            "Cite chunk_ids from the retrieved context. Be ultra-specific, fact-based, and boardroom-ready.\n"
+            "Keep the output structured, premium boardroom-quality, and under 350 words."
         )
 
         query_text = f"competitor product launch pricing feature brand reputation review feedback sentiment {entities_str}"
 
         try:
+            task = _append_additional_context(task, state)
             r = await runner.run(
                 agent=agent_name,  # type: ignore[arg-type]
                 task=task,
@@ -358,15 +379,16 @@ def make_radar_node(runner: AgentRunner) -> NodeFn:
 
         task = (
             f"Act as Worker 6: The Radar Agent (Other/Emerging Updates) for the {pack.name} domain for {location_str}.\n"
-            f"Your objective is to identify the Top 3 miscellaneous but critical anomalies, adjacent industry trends, "
-            f"or localized emerging events that do not fit into other domains but carry strategic significance.\n"
-            "Cite chunk_ids from the retrieved context. Be ultra-specific and factual.\n"
-            "Keep the output extremely structured, fact-based, and under 300 words in total."
+            f"Your objective is to identify the Top 3 critical anomalies, localized emerging signals, or adjacent industry trends "
+            f"carrying high strategic importance (e.g. non-linear market shocks, disruptive tech, or local policy discussions).\n"
+            "Cite chunk_ids from the retrieved context. Be ultra-specific, fact-based, and boardroom-ready.\n"
+            "Keep the output structured, premium boardroom-quality, and under 350 words."
         )
 
-        query_text = f"emerging trends anomalies adjacent industry unexpected events radar local developments new ideas"
+        query_text = "emerging trends anomalies adjacent industry unexpected events radar local developments new ideas"
 
         try:
+            task = _append_additional_context(task, state)
             r = await runner.run(
                 agent=agent_name,  # type: ignore[arg-type]
                 task=task,
@@ -482,6 +504,7 @@ def make_research_synthesizer_node(runner: AgentRunner) -> NodeFn:
         )
 
         try:
+            task = _append_additional_context(task, state)
             r = await runner.run(
                 agent=agent_name,  # type: ignore[arg-type]
                 task=task,

@@ -53,6 +53,8 @@ def get_gpu_status():
 
 def allocate_gpus():
     gpus = get_gpu_status()
+    # Exclude GPUs 3, 5, 6, 7 reserved for GGUF servers
+    gpus = [g for g in gpus if g["index"] not in {3, 5, 6, 7}]
     if not gpus:
         # Fallback if nvidia-smi fails
         return {
@@ -89,7 +91,7 @@ def allocate_gpus():
 
         # vLLM TP size must be a power of 2 (1, 2, 4, 8)
         tp_size = 1
-        for p in [8, 4, 2, 1]:
+        for p in [2, 1]:
             if p <= len(vllm_gpus):
                 tp_size = p
                 break

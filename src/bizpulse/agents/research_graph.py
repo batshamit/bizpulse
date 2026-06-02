@@ -6,10 +6,10 @@ from typing import Any
 
 from bizpulse.agents.research_nodes import (
     make_academic_tracker_node,
-    make_policy_analyst_node,
-    make_market_scout_node,
-    make_environmental_monitor_node,
     make_competitive_intelligence_node,
+    make_environmental_monitor_node,
+    make_market_scout_node,
+    make_policy_analyst_node,
     make_radar_node,
     make_research_synthesizer_node,
 )

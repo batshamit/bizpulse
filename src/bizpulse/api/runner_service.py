@@ -28,8 +28,6 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from uuid import UUID
 
-from qdrant_client import QdrantClient
-
 from bizpulse.agents import AgentRunner, Council
 from bizpulse.agents.graph import build_analysis_graph
 from bizpulse.config import settings
@@ -416,8 +414,6 @@ async def _fetch_google_search_artifacts(
     from bizpulse.retrieval.web_search import GoogleSearchClient
 
     client = GoogleSearchClient()
-    if not client.api_key or not client.cse_id:
-        return []
 
     log.info(
         "runner.google_search.start",
@@ -543,14 +539,13 @@ async def _extract_intel_from_search(
         "}"
     )
 
-    if not search_texts:
-        system_prompt += (
-            "\n\nIMPORTANT: Since live search results are currently unavailable/empty, you MUST leverage your deep industry "
-            "knowledge of the target industry and location to generate highly specific, realistic, and country-appropriate "
-            "policy changes (like RBI, SEBI, DPDP rules for fintech in India, RERA for real estate, DPDP/GDPR for digital, etc.), academic breakthroughs, "
-            "strategic Deals, climate ESG risks, competitor moves, and anomalies. Never return empty arrays or empty strings; "
-            "always provide highly relevant and rich data to ensure a premium, complete boardroom-ready report."
-        )
+    system_prompt += (
+        "\n\nIMPORTANT: You MUST ensure all generated or extracted insights are highly specific, realistic, and country-appropriate "
+        "(like RBI, SEBI, and DPDP rules for fintech in India, RERA for real estate, DPDP/GDPR for digital, etc.). "
+        "Every single update, paper, deal, threat, and anomaly must be exceptionally realistic, detailed, professional, and contain "
+        "specific corporate entities, quantitative metrics, or concrete legal frameworks where appropriate. "
+        "Never return generic placeholders. Always populate all fields with high-quality, actionable, premium boardroom-ready analysis."
+    )
 
     user_prompt = (
         f"Analyze the search results for the {industry} industry in {country} "
@@ -575,8 +570,8 @@ async def _extract_intel_from_search(
 
 
 async def _heartbeat_sender(run_id: UUID, store: Store, stop_event: asyncio.Event) -> None:
-    import socket
     import os
+    import socket
     hostname = socket.gethostname()
     pid = os.getpid()
     
@@ -587,10 +582,9 @@ async def _heartbeat_sender(run_id: UUID, store: Store, stop_event: asyncio.Even
         except Exception as exc:
             log.warning("runner.heartbeat.failed", run_id=str(run_id), error=str(exc))
         
-        try:
+        import contextlib
+        with contextlib.suppress(asyncio.TimeoutError):
             await asyncio.wait_for(stop_event.wait(), timeout=15.0)
-        except asyncio.TimeoutError:
-            pass
 
 
 async def run_analysis_background(
@@ -837,9 +831,7 @@ async def _run_analysis_background_impl(
     # are visible in the same collection.
     _set("embedding")
     embedder = _pick_embedder()
-    qd_dir = _QDRANT_BASE / f"biz-{business.id}"
-    qd_dir.mkdir(parents=True, exist_ok=True)
-    repo = TenantQdrant(business.tenant_id, client=QdrantClient(path=str(qd_dir)))
+    repo = TenantQdrant(business.tenant_id)
     pipe = IngestionPipeline(repo, embedder, industry=business.industry, batch_size=24)
     try:
         await pipe.ingest(artifacts)
@@ -874,6 +866,19 @@ async def _run_analysis_background_impl(
     except Exception as exc:
         log.warning("runner.few_shots.failed", error=str(exc))
 
+    resolved_context = additional_context
+    if resolved_context:
+        from bizpulse.retrieval.web_search import _get_business_name_from_url
+        biz_name = _get_business_name_from_url(business.url).title()
+        try:
+            tenant = store.get_tenant(business.tenant_id)
+            tenant_name = tenant.name if tenant else "Executive Board"
+        except Exception:
+            tenant_name = "Executive Board"
+        
+        resolved_context = resolved_context.replace("{{COMPANY_OR_INDUSTRY}}", biz_name)
+        resolved_context = resolved_context.replace("{{USER_PROFILE}}", f"{tenant_name} Analyst")
+
     initial_state = {
         "run_id": run_id,
         "tenant_id": business.tenant_id,
@@ -885,6 +890,7 @@ async def _run_analysis_background_impl(
         "few_shots": few_shots,
         "run_type": run_type,
         "speed": speed,
+        "additional_context": resolved_context,
     }
     try:
         final = await _invoke_graph_with_retry(graph, initial_state)
